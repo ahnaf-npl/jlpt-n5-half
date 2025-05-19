@@ -2,7 +2,6 @@ import React from "react";
 
 function IntroScreen({ isAgreed, onAgreeChange, onStartExam, config }) {
   return (
-    // Tempelkan JSX intro di sini
     <div className="flex flex-col items-center justify-center h-full p-4 modal">
       <img
         src="/actstudy_logo.png"

@@ -1,6 +1,5 @@
 import React from "react";
 
-// SESUAIKAN DAFTAR PROPS DI SINI berdasarkan variabel/fungsi yang digunakan di bawah
 function ResultScreen({
   finalScore, // Digunakan untuk menampilkan skor dan logika lulus/tidak lulus
   submitTime, // Digunakan untuk menampilkan waktu submit
@@ -8,12 +7,7 @@ function ResultScreen({
   formatHMS, // Fungsi helper untuk format waktu (digunakan untuk durasi)
   onRetry, // Handler fungsi untuk mengulang ujian (dipanggil dari tombol)
 }) {
-  // Komponen ini dirender kondisional di parent, jadi tidak perlu `if (!isOpen)` atau sejenisnya
-  // tetapi tetap bisa menerima prop `isOpen` jika diinginkan untuk animasi masuk/keluar step.
-  // Namun, berdasarkan kode Anda, prop yang dibutuhkan hanyalah untuk menampilkan data dan memanggil onRetry.
-
   return (
-    // JSX Result Screen (SESUAI DENGAN YANG ANDA KIRIMKAN, TIDAK BERUBAH)
     <div className="w-full flex flex-col items-center justify-center min-h-screen p-2 text-white">
       <img
         src="/actstudy_logo.png"

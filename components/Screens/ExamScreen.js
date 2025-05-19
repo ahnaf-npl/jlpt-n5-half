@@ -1,20 +1,6 @@
 import React from "react";
 
 function ExamScreen({
-  // progress, // Digunakan untuk style progress bar
-  // formatHMS, // Digunakan untuk format waktu
-  // timeLeft, // Digunakan untuk menampilkan waktu tersisa
-  // videoRef, // Digunakan sebagai ref pada elemen <video>
-  // recorderState, // Digunakan untuk menampilkan/menyembunyikan indikator recording
-  // qs, // Array pertanyaan (digunakan untuk qs.length, qs[cur], qs[cur]?.options)
-  // cur, // Index pertanyaan saat ini (digunakan di berbagai tempat untuk mengakses qs, ans)
-  // ans, // Objek jawaban pengguna (digunakan untuk mengecek jawaban ans[cur])
-  // setAns, // Setter untuk memperbarui jawaban (digunakan di onChange input radio)
-  // setCur, // Setter untuk mengubah index pertanyaan (digunakan di onClick tombol sebelumnya/selanjutnya)
-  // renderRubySegment, // Fungsi helper untuk merender ruby (digunakan di map opsi/pertanyaan)
-  // openQuestionMapModal, // Handler untuk membuka modal peta soal (digunakan di onClick tombol peta)
-  // onInitiateSubmit,
-  // totalQuestions, // Handler untuk submit ujian (digunakan di onClick tombol submit)
   qs,
   ans,
   setAns,
@@ -31,7 +17,6 @@ function ExamScreen({
   totalQuestions,
 }) {
   return (
-    // Tempelkan JSX intro di sini
     <div className="p-2 md:p-4 w-full max-w-3xl mx-auto modal">
       <div className="flex justify-between mb-4">
         <div>
