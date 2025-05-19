@@ -136,16 +136,6 @@ export default function Home() {
     }
   }
 
-  // function generateQuestions() {
-  //   let sel = [];
-  //   for (const [grp, cnt] of Object.entries(CONFIG.groupCounts)) {
-  //     const pool = QUESTION_GROUPS[grp] || [];
-  //     sel.push(...pool.sort(() => 0.5 - Math.random()).slice(0, cnt));
-  //   }
-  //   const sh = sel.sort(() => 0.5 - Math.random());
-  //   sh.forEach((q) => (q.options = q.options.sort(() => 0.5 - Math.random())));
-  //   return sh;
-  // }
   function generateQuestions() {
     let sel = [];
     for (const [grp, cnt] of Object.entries(CONFIG.groupCounts)) {
@@ -431,20 +421,23 @@ export default function Home() {
         setStep("result"); // Transition to result step
       }, 300); // Match animation duration (e.g., 300ms)
     }
-  } // Handler untuk memunculkan modal konfirmasi submit
+  }
 
+  // Handler untuk memunculkan modal konfirmasi submit
   const handleInitiateSubmit = () => {
     setIsConfirmSubmitModalOpen(true);
-  }; // Handler untuk tombol 'Tidak' di modal konfirmasi
+  };
 
+  // Handler untuk tombol 'Tidak' di modal konfirmasi
   const closeConfirmModal = () => {
     setIsClosingConfirm(true);
     setTimeout(() => {
       setIsConfirmSubmitModalOpen(false);
       setIsClosingConfirm(false); // Reset state closing
     }, 300); // Durasi animasi
-  }; // Handler untuk tombol 'Ya' di modal konfirmasi
+  };
 
+  // Handler untuk tombol 'Ya' di modal konfirmasi
   const handleConfirmSubmit = () => {
     // Start closing animation for confirm modal
     setIsClosingConfirm(true);
