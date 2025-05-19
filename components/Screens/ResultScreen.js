@@ -1,0 +1,72 @@
+import React from "react";
+
+// SESUAIKAN DAFTAR PROPS DI SINI berdasarkan variabel/fungsi yang digunakan di bawah
+function ResultScreen({
+  finalScore, // Digunakan untuk menampilkan skor dan logika lulus/tidak lulus
+  submitTime, // Digunakan untuk menampilkan waktu submit
+  elapsed, // Digunakan untuk menampilkan durasi pengerjaan
+  formatHMS, // Fungsi helper untuk format waktu (digunakan untuk durasi)
+  onRetry, // Handler fungsi untuk mengulang ujian (dipanggil dari tombol)
+}) {
+  // Komponen ini dirender kondisional di parent, jadi tidak perlu `if (!isOpen)` atau sejenisnya
+  // tetapi tetap bisa menerima prop `isOpen` jika diinginkan untuk animasi masuk/keluar step.
+  // Namun, berdasarkan kode Anda, prop yang dibutuhkan hanyalah untuk menampilkan data dan memanggil onRetry.
+
+  return (
+    // JSX Result Screen (SESUAI DENGAN YANG ANDA KIRIMKAN, TIDAK BERUBAH)
+    <div className="w-full flex flex-col items-center justify-center min-h-screen p-2 text-white">
+      <img
+        src="/actstudy_logo.png"
+        className="w-52 rounded-top mx-auto mb-8"
+        alt="Act Study Logo"
+      />
+      <div
+        className={`bg-white border-t-4 p-8 rounded-lg shadow-lg text-center max-w-xl w-full text-gray-800 transform transition-all duration-500 ease-out scale-100 opacity-100 ${
+          finalScore >= 50 ? "border-green-600" : "border-red-600" // Menggunakan prop finalScore
+        }`}
+      >
+        <h2 className="text-3xl font-bold mb-6 text-slate-700">Hasil Tes</h2>
+        {/* Larger title */}
+        <div
+          className={`text-5xl font-extrabold mb-6 ${
+            finalScore >= 50 ? "text-green-600" : "text-red-600" // Menggunakan prop finalScore
+          }`}
+        >
+          {finalScore}% {/* Menggunakan prop finalScore */}
+        </div>
+        {/* Pass/Fail Message */}
+        <p
+          className={`text-lg font-semibold mb-8 ${
+            finalScore >= 50 ? "text-green-600" : "text-red-600" // Menggunakan prop finalScore
+          }`}
+        >
+          {finalScore >= 50 // Menggunakan prop finalScore
+            ? "Selamat, Anda Lulus! Terus tingkatkan!"
+            : "Maaf, Anda Belum Lulus. Ayo belajar lagi!"}
+        </p>
+        <p className="mb-1 text-slate-700">
+          Waktu Submit : 
+          {submitTime ? new Date(submitTime).toLocaleDateString() : "N/A"}{" "}
+          {/* Menggunakan prop submitTime */}
+        </p>
+        <p className="text-slate-700">
+          Durasi Pengerjaan : 
+          {elapsed != null ? formatHMS(Math.floor(elapsed / 1000)) : "N/A"}{" "}
+          {/* Menggunakan prop elapsed dan formatHMS */}
+        </p>
+        {/* --- Ditambahkan: Tombol Ulangi Ujian (Kondisional) --- */}
+        {/* Tampilkan tombol ini HANYA jika skor kurang dari 60 */}
+        {finalScore < 60 && ( // Menggunakan prop finalScore
+          <button
+            onClick={onRetry} // Menggunakan prop onRetry yang disediakan parent
+            className="mt-8 px-6 py-3 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors ease-in font-semibold shadow-md"
+          >
+            Ulangi Ujian
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default ResultScreen;

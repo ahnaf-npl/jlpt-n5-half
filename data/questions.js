@@ -16505,6 +16505,7 @@ const QUESTION_GROUPS = {
     {
       q: [
         { base: "（タクシーで）", ruby: "" },
+        { base: "<br>", ruby: "" },
         { base: "A：まっすぐ", ruby: "" },
         { base: "　", ruby: "" },
         { base: "行", ruby: "い" },
@@ -23874,7 +23875,8 @@ const QUESTION_GROUPS = {
     {
       desc: "Pilih jawaban yang paling tepat untuk melengkapi kalimat.",
       q: [
-        { base: "A：日本", ruby: "にほん" },
+        { base: "A：", ruby: "" },
+        { base: "日本", ruby: "にほん" },
         { base: "から", ruby: "" },
         { base: "　", ruby: "" },
         { base: "ベトナムまで", ruby: "" },
@@ -24157,7 +24159,8 @@ const QUESTION_GROUPS = {
     {
       desc: "Pilih jawaban yang paling tepat untuk melengkapi kalimat.",
       q: [
-        { base: "A：日本語", ruby: "にほんご" },
+        { base: "A：", ruby: "" },
+        { base: "日本語", ruby: "にほんご" },
         { base: "と、えい語", ruby: "ご" },
         { base: "と", ruby: "" },
         { base: "　", ruby: "" },
@@ -24227,7 +24230,8 @@ const QUESTION_GROUPS = {
     {
       desc: "Pilih jawaban yang paling tepat untuk melengkapi kalimat.",
       q: [
-        { base: "A：お父", ruby: "とう" },
+        { base: "A：お", ruby: "" },
+        { base: "父", ruby: "とう" },
         { base: "さん", ruby: "" },
         { base: "（　　）", ruby: "" },
         { base: "　", ruby: "" },
@@ -24314,7 +24318,8 @@ const QUESTION_GROUPS = {
     {
       desc: "Pilih jawaban yang paling tepat untuk melengkapi kalimat.",
       q: [
-        { base: "A：日本", ruby: "にほん" },
+        { base: "A：", ruby: "" },
+        { base: "日本", ruby: "にほん" },
         { base: "の", ruby: "" },
         { base: "　", ruby: "" },
         { base: "食", ruby: "た" },
@@ -25056,7 +25061,8 @@ const QUESTION_GROUPS = {
     {
       desc: "Pilih jawaban yang paling tepat untuk melengkapi kalimat.",
       q: [
-        { base: "A：先生", ruby: "せんせい" },
+        { base: "A：", ruby: "" },
+        { base: "先生", ruby: "せんせい" },
         { base: "は", ruby: "" },
         { base: "　", ruby: "" },
         { base: "けっこん", ruby: "" },
@@ -25207,7 +25213,8 @@ const QUESTION_GROUPS = {
     {
       desc: "Pilih jawaban yang paling tepat untuk melengkapi kalimat.",
       q: [
-        { base: "A：この電話", ruby: "でんわ" },
+        { base: "A：この", ruby: "" },
+        { base: "電話", ruby: "でんわ" },
         { base: "を", ruby: "" },
         { base: "　", ruby: "" },
         { base: "（　　　　）", ruby: "" },
@@ -25365,7 +25372,8 @@ const QUESTION_GROUPS = {
     {
       desc: "Pilih jawaban yang paling tepat untuk melengkapi kalimat.",
       q: [
-        { base: "A：大学", ruby: "だいがく" },
+        { base: "A：", ruby: "" },
+        { base: "大学", ruby: "だいがく" },
         { base: "を", ruby: "" },
         { base: "　", ruby: "" },
         { base: "（　　　）", ruby: "" },
@@ -25700,7 +25708,8 @@ const QUESTION_GROUPS = {
     {
       desc: "Pilih jawaban yang paling tepat untuk melengkapi kalimat.",
       q: [
-        { base: "A：今", ruby: "いま" },
+        { base: "A：", ruby: "" },
+        { base: "今", ruby: "いま" },
         { base: "　", ruby: "" },
         { base: "お金", ruby: "かね" },
         { base: "を", ruby: "" },
@@ -26135,7 +26144,11 @@ const QUESTION_GROUPS = {
       desc: "Pilih jawaban yang paling tepat untuk melengkapi kalimat.",
       q: [
         {
-          base: "A：車",
+          base: "A：",
+          ruby: "",
+        },
+        {
+          base: "車",
           ruby: "くるま",
         },
         {
@@ -26799,7 +26812,11 @@ const QUESTION_GROUPS = {
       desc: "Pilih jawaban yang paling tepat untuk melengkapi kalimat.",
       q: [
         {
-          base: "A：外国",
+          base: "A：",
+          ruby: "",
+        },
+        {
+          base: "外国",
           ruby: "がいこく",
         },
         {
@@ -26875,7 +26892,11 @@ const QUESTION_GROUPS = {
       desc: "Pilih jawaban yang paling tepat untuk melengkapi kalimat.",
       q: [
         {
-          base: "A：今日",
+          base: "A：",
+          ruby: "",
+        },
+        {
+          base: "今日",
           ruby: "きょう",
         },
         {
@@ -26947,7 +26968,11 @@ const QUESTION_GROUPS = {
       desc: "Pilih jawaban yang paling tepat untuk melengkapi kalimat.",
       q: [
         {
-          base: "A：休",
+          base: "A：",
+          ruby: "",
+        },
+        {
+          base: "休",
           ruby: "やす",
         },
         {
@@ -28231,7 +28256,11 @@ const QUESTION_GROUPS = {
       desc: "Pilih jawaban yang paling tepat untuk melengkapi kalimat.",
       q: [
         {
-          base: "A：今日",
+          base: "A：",
+          ruby: "",
+        },
+        {
+          base: "今日",
           ruby: "きょう",
         },
         {
@@ -28367,7 +28396,11 @@ const QUESTION_GROUPS = {
       desc: "Pilih jawaban yang paling tepat untuk melengkapi kalimat.",
       q: [
         {
-          base: "A：先生",
+          base: "A：",
+          ruby: "",
+        },
+        {
+          base: "先生",
           ruby: "せんせい",
         },
         {
@@ -28547,7 +28580,11 @@ const QUESTION_GROUPS = {
       desc: "Pilih jawaban yang paling tepat untuk melengkapi kalimat.",
       q: [
         {
-          base: "A：日本",
+          base: "A：",
+          ruby: "",
+        },
+        {
+          base: "日本",
           ruby: "にほん",
         },
         {
@@ -30491,7 +30528,11 @@ const QUESTION_GROUPS = {
       desc: "Pilih jawaban yang paling tepat untuk melengkapi kalimat.",
       q: [
         {
-          base: "A：去年",
+          base: "A：",
+          ruby: "",
+        },
+        {
+          base: "去年",
           ruby: "きょねん",
         },
         {
@@ -30999,7 +31040,11 @@ const QUESTION_GROUPS = {
       desc: "Pilih jawaban yang paling tepat untuk melengkapi kalimat.",
       q: [
         {
-          base: "A：明日",
+          base: "A：",
+          ruby: "",
+        },
+        {
+          base: "明日",
           ruby: "あした",
         },
         {
@@ -37373,12 +37418,12 @@ const QUESTION_GROUPS = {
       desc: "Pilih jawaban yang tepat untuk mengisi bagian kalimat yang bertanda bintang (★).",
       q: [
         {
-          base: "A：日曜",
-          ruby: "にちよう",
+          base: "A：",
+          ruby: "",
         },
         {
-          base: "日",
-          ruby: "び",
+          base: "日曜日",
+          ruby: "にちようび",
         },
         {
           base: "は",
@@ -37589,7 +37634,11 @@ const QUESTION_GROUPS = {
       desc: "Pilih jawaban yang tepat untuk mengisi bagian kalimat yang bertanda bintang (★).",
       q: [
         {
-          base: "A：日本",
+          base: "A：",
+          ruby: "",
+        },
+        {
+          base: "日本",
           ruby: "にほん",
         },
         {
@@ -38153,7 +38202,11 @@ const QUESTION_GROUPS = {
       desc: "Pilih jawaban yang tepat untuk mengisi bagian kalimat yang bertanda bintang (★).",
       q: [
         {
-          base: "A：今",
+          base: "A：",
+          ruby: "",
+        },
+        {
+          base: "今",
           ruby: "いま",
         },
         {
@@ -39211,8 +39264,12 @@ const QUESTION_GROUPS = {
       desc: "Pilih jawaban yang tepat untuk mengisi bagian kalimat yang bertanda bintang (★).",
       q: [
         {
-          base: "A：買",
-          ruby: "かい",
+          base: "A：",
+          ruby: "",
+        },
+        {
+          base: "買",
+          ruby: "か",
         },
         {
           base: "い",
