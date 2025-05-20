@@ -701,7 +701,7 @@ export default function Home() {
     setIsClosingSubmitting(false); // Anda mungkin ingin secara eksplisit memanggil generateQuestions() di sini // jika generateQuestions tidak otomatis dipanggil di begin() // Namun, karena begin() dipanggil saat user klik "Mulai" setelah retry, // pemanggilan generateQuestions() di dalam begin() sudah cukup. // generateQuestions(); // Optional: panggil di sini jika perlu refresh soal sebelum begin
   };
   return (
-    <div className="w-full flex justify-center min-h-screen py-12 bg-slate-200 select-none relative overflow-hidden">
+    <div className="w-full flex justify-center min-h-screen py-12 bg-slate-200 select-none relative overflow-hidden overscroll-none">
       <SubmittingModal isOpen={isSubmitting} isClosing={isClosingSubmitting} /> 
       <AuthErrorModal
         isOpen={!!authError} // Tampilkan jika authError punya nilai
