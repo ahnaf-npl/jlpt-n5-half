@@ -35,6 +35,7 @@ function ExamScreen({
           <video
             ref={videoRef}
             autoPlay
+            playsInline
             muted
             className="w-full h-full object-cover transform scale-x-[-1]" // Video akan mengisi penuh wrapper div
           />
