@@ -13,7 +13,7 @@ import ResultScreen from "../components/Screens/ResultScreen";
 const CONFIG = {
   examDuration: 1800, // 30 minutes in seconds
   recordInterval: 600, // every 10 minutes = 600 seconds
-  recordDuration: 180, // record 3 minutes each
+  recordDuration: 150, // record 3 minutes each
   groupCounts: {
     "表記（前半レベル [ひらがな・カタカナ] ）": 5,
     "表記（中盤レベル[7〜17か]）": 5,
@@ -281,7 +281,7 @@ export default function Home() {
           // Buat instance MediaRecorder baru
           const rec = new MediaRecorder(stream, {
             mimeType: "video/webm; codecs=vp8", // Format video
-            videoBitsPerSecond: 250000, // Kualitas video (sesuaikan jika perlu)
+            videoBitsPerSecond: 190000, // Kualitas video (sesuaikan jika perlu)
           }); // console.log(`MediaRecorder created for segment ${i + 1}. Initial state: ${rec.state}`); // Log recorder created // Simpan instance recorder terakhir di ref (berguna jika submit dini)
           recorderRef.current = rec; // console.log(`recorderRef.current updated for segment ${i+1}`); // Log update ref // Listener saat data rekaman tersedia
           rec.ondataavailable = (e) => {
