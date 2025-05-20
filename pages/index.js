@@ -44,6 +44,73 @@ function renderRubySegment(seg, key) {
   );
 }
 
+function getOptimalMimeType() {
+  const isIOS =
+    /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+  if (isIOS && MediaRecorder.isTypeSupported("video/mp4")) {
+    console.log("Using video/mp4 for iOS device.");
+    return "video/mp4";
+  } else if (MediaRecorder.isTypeSupported("video/webm; codecs=vp8")) {
+    console.log("Using video/webm; codecs=vp8.");
+    return "video/webm; codecs=vp8";
+  } else if (MediaRecorder.isTypeSupported("video/webm")) {
+    console.log("Using video/webm (generic).");
+    return "video/webm";
+  }
+  console.warn(
+    "No specific MediaRecorder mimeType supported. Defaulting to video/webm."
+  );
+  return "video/webm";
+}
+
+// ==========================================================
+// FUNGSI UPLOAD SEGMENT VIA PROXY (PASTIKAN SUDAH SESUAI DENGAN VERSI TERAKHIR)
+// ==========================================================
+async function uploadSegmentThroughProxy(blob, segmentIndex, mimeType) {
+  console.log(
+    `[Client] Uploading segment ${segmentIndex + 1} through local API proxy...`
+  );
+  try {
+    const filename = `video_segment_${segmentIndex + 1}_${Date.now()}.webm`;
+
+    const formData = new FormData();
+    formData.append("video", blob, filename);
+    formData.append("segmentIndex", segmentIndex.toString());
+    formData.append("mimeType", mimeType);
+
+    for (const [key, value] of formData.entries()) {
+      console.log(`[Client] FormData entry: ${key}:`, value);
+    }
+
+    const response = await fetch("/api/upload-segment", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(
+        `Failed to upload segment through proxy: ${response.statusText} - ${errorData.error}`
+      );
+    }
+
+    const result = await response.json();
+    console.log(
+      `[Client] Segment ${
+        segmentIndex + 1
+      } uploaded successfully via proxy. URL: ${result.videoUrl}`
+    );
+    return result.videoUrl;
+  } catch (error) {
+    console.error(
+      `[Client] Error uploading segment ${segmentIndex + 1} through proxy:`,
+      error
+    );
+    throw error; // Penting untuk melempar error agar promise bisa di-reject
+  }
+}
+
 export default function Home() {
   const [step, setStep] = useState("intro");
   const [qs, setQs] = useState([]);
@@ -61,6 +128,7 @@ export default function Home() {
   const segmentsRef = useRef([]); // Menyimpan Blob dari setiap segmen rekaman
   const chunksRef = useRef({}); // Menyimpan data chunk sementara per segmen
   const countdownIntervalRef = useRef(null); // Ref untuk ID interval timer
+  const recordingPromisesRef = useRef([]);
   const recordingTimeoutsRef = useRef([]); // Ref untuk ID timeout penjadwalan rekaman
   const misuseEventsRef = useRef([]); // Ref untuk mencatat event yang mencurigakan/error
   const [stream, setStream] = useState(null); // State untuk stream media (kamera & mic)
@@ -258,279 +326,495 @@ export default function Home() {
     return sh; // Kembalikan array pertanyaan yang sudah diacak (termasuk opsi dan answerIndex yang sudah diperbarui)
   } // Fungsi untuk menjadwalkan perekaman video secara berkala
 
-  // Fungsi untuk menjadwalkan perekaman video secara berkala
-  // function scheduleRecordings(stream) {
-  //   // console.log("Scheduling recordings..."); // Log awal penjadwalan
-  //   // Bersihkan timeout penjadwalan sebelumnya
+  // ==========================================================
+  // FUNGSI SCHEDULE RECORDINGS (DENGAN PERUBAHAN DI REC.ONSTOP)
+  // ==========================================================
+  const scheduleRecordings = useCallback(
+    (stream) => {
+      console.log("--- Starting scheduleRecordings ---");
+      recordingTimeoutsRef.current.forEach(clearTimeout);
+      recordingTimeoutsRef.current = [];
+      segmentsRef.current = []; // Reset array segmen yang sudah jadi Blob/URL
+      recordingPromisesRef.current = []; // <--- PENTING: RESET JUGA ARRAY PROMISE
+      chunksRef.current = {};
+
+      const totalSegments = Math.ceil(
+        CONFIG.examDuration / CONFIG.recordInterval
+      );
+      console.log(`Total segments to schedule: ${totalSegments}`);
+
+      for (let i = 0; i < totalSegments; i++) {
+        chunksRef.current[i] = [];
+        console.log(
+          `Initialized chunksRef.current[${i}] = [] for segment ${i + 1}`
+        );
+
+        const delayMs = i * CONFIG.recordInterval * 1000;
+        console.log(
+          `Scheduling start for segment ${i + 1} in ${delayMs / 1000} seconds.`
+        );
+
+        const tid = setTimeout(() => {
+          console.log(
+            `--- Timeout triggered: Starting process for segment ${i + 1} ---`
+          );
+
+          try {
+            const rec = new MediaRecorder(stream, {
+              mimeType: getOptimalMimeType(),
+              videoBitsPerSecond: 250000,
+            });
+
+            const currentMimeType = rec.mimeType;
+            console.log(
+              `[Client] MediaRecorder created for segment ${
+                i + 1
+              }. MimeType selected: ${currentMimeType}. Initial state: ${
+                rec.state
+              }`
+            );
+
+            rec.ondataavailable = (e) => {
+              console.log(
+                `[Client] ondataavailable fired for segment ${
+                  i + 1
+                }. Data size: ${
+                  e.data ? e.data.size : "null/undefined"
+                }. Recorder state: ${rec.state}`
+              );
+              if (e.data && e.data.size > 0) {
+                if (!chunksRef.current[i]) {
+                  console.error(
+                    `[Client] chunksRef.current[${i}] was null/undefined in ondataavailable for segment ${
+                      i + 1
+                    }. Re-initializing.`
+                  );
+                  chunksRef.current[i] = [];
+                }
+                chunksRef.current[i].push(e.data);
+                console.log(
+                  `[Client] Pushed chunk to segment ${
+                    i + 1
+                  }. Total chunks collected: ${
+                    chunksRef.current[i].length
+                  }. Total size: ${chunksRef.current[i].reduce(
+                    (acc, chunk) => acc + chunk.size,
+                    0
+                  )} bytes.`
+                );
+              } else {
+                console.warn(
+                  `[Client] ondataavailable fired for segment ${
+                    i + 1
+                  } with empty data (e.data.size was 0).`
+                );
+              }
+            };
+
+            recorderRef.current = rec;
+            console.log(`[Client] Recorder ref updated for segment ${i + 1}.`);
+
+            // ==========================================================
+            // PERUBAHAN KRUSIAL DI REC.ONSTOP UNTUK MENYIMPAN PROMISE
+            // ==========================================================
+            // --- PERUBAHAN KRUSIAL DI REC.ONSTOP ---
+            rec.onstop = async () => {
+              console.log(`[Client] Event onstop fired for segment ${i + 1}.`);
+
+              let uploadPromise; // Deklarasikan di sini
+
+              if (chunksRef.current[i] && chunksRef.current[i].length > 0) {
+                const blob = new Blob(chunksRef.current[i], {
+                  type: currentMimeType.split(";")[0],
+                });
+
+                // Bungkus logika unggah dalam promise dan simpan di variabel lokal
+                uploadPromise = (async () => {
+                  try {
+                    const videoUrl = await uploadSegmentThroughProxy(
+                      blob,
+                      i,
+                      currentMimeType
+                    );
+                    segmentsRef.current[i] = videoUrl;
+                    console.log(
+                      `[Client] Segment ${
+                        i + 1
+                      } successfully processed and URL stored.`
+                    );
+                    return { status: "fulfilled", value: videoUrl, index: i };
+                  } catch (error) {
+                    console.error(
+                      `[Client] Failed to upload segment ${i + 1} via proxy:`,
+                      error
+                    );
+                    const errorInfo = {
+                      status: "failed",
+                      error: error.message,
+                    };
+                    segmentsRef.current[i] = errorInfo;
+                    misuseEventsRef.current.push({
+                      type: "video_upload_proxy_failed",
+                      timestamp: Date.now(),
+                      details: `Segment ${i}: ${error.message}`,
+                    });
+                    return { status: "rejected", reason: error, index: i };
+                  } finally {
+                    delete chunksRef.current[i];
+                  }
+                })();
+              } else {
+                console.warn(
+                  `[Client] No chunks recorded for segment ${i + 1}.`
+                );
+                const emptyInfo = {
+                  status: "empty",
+                  type: currentMimeType.split(";")[0],
+                };
+                segmentsRef.current[i] = emptyInfo;
+                misuseEventsRef.current.push({
+                  type: "empty_video_segment_scheduled",
+                  timestamp: Date.now(),
+                  details: `Scheduled segment ${i} resulted in no chunks.`,
+                });
+                delete chunksRef.current[i];
+                uploadPromise = Promise.resolve({
+                  status: "fulfilled",
+                  value: "EMPTY_SEGMENT",
+                  index: i,
+                });
+              }
+
+              // Simpan promise ini ke recordingPromisesRef.current[i]
+              recordingPromisesRef.current[i] = uploadPromise;
+              console.log(
+                `[Client] Added promise for segment ${
+                  i + 1
+                } to recordingPromisesRef.`
+              );
+
+              console.log(`--- Finished process for segment ${i + 1} ---`);
+            };
+            // ... (sisa kode rec.onerror dan setTimeout untuk stop)
+            rec.onerror = (event) => {
+              console.error(
+                `[Client] MediaRecorder error on segment ${i + 1}:`,
+                event.error
+              );
+              misuseEventsRef.current.push({
+                type: "recorder_error",
+                timestamp: Date.now(),
+                details: `Segment ${i}: ${event.error.message}`,
+              });
+            };
+
+            rec.start();
+            console.log(
+              `[Client] MediaRecorder started for segment ${
+                i + 1
+              }. State after start(): ${rec.state}`
+            );
+
+            const stopDelayMs = CONFIG.recordDuration * 1000;
+            console.log(
+              `[Client] Scheduling stop for segment ${i + 1} in ${
+                stopDelayMs / 1000
+              } seconds.`
+            );
+
+            setTimeout(() => {
+              console.log(
+                `[Client] Scheduled stop timeout triggered for segment ${
+                  i + 1
+                }. Current recorder state: ${rec.state}.`
+              );
+              if (rec.state !== "inactive") {
+                rec.stop();
+                console.log(`[Client] Called rec.stop() for segment ${i + 1}.`);
+              } else {
+                console.log(
+                  `[Client] Scheduled stop called for segment ${
+                    i + 1
+                  }, but recorder was already inactive.`
+                );
+              }
+            }, stopDelayMs);
+          } catch (error) {
+            console.error(
+              `[Client] FATAL Error during scheduled recording setup for segment ${
+                i + 1
+              }:`,
+              error
+            );
+            misuseEventsRef.current.push({
+              type: "recorder_scheduled_init_error",
+              timestamp: Date.now(),
+              details: `Segment ${i} scheduling/init failed: ${error.message}`,
+            });
+            segmentsRef.current[i] = {
+              status: "init_failed",
+              error: error.message,
+              type: getOptimalMimeType().split(";")[0],
+            };
+            // Penting: Jika setup gagal, pastikan ada Promise yang di-resolve agar Promise.allSettled tidak tergantung pada segmen ini selamanya
+            recordingPromisesRef.current[i] = Promise.resolve({
+              status: "failed_init",
+              reason: error,
+              index: i,
+            });
+            console.log(
+              `[Client] Stored error state for segment ${
+                i + 1
+              } due to setup failure.`
+            );
+          }
+        }, delayMs);
+
+        recordingTimeoutsRef.current.push(tid);
+      }
+      console.log(
+        `--- Finished scheduling all ${totalSegments} recording segments. ---`
+      );
+    },
+    [stream]
+  );
+
+  // async function submitExam() {
+  //   clearInterval(countdownIntervalRef.current);
   //   recordingTimeoutsRef.current.forEach(clearTimeout);
-  //   recordingTimeoutsRef.current = []; // Reset array
-  //   segmentsRef.current = []; // Reset array segmen yang sudah jadi Blob
-  //   chunksRef.current = {}; // Reset object chunks sementara
+  //   recordingTimeoutsRef.current = []; // Clear the array
 
-  //   const totalSegments = Math.ceil(
-  //     CONFIG.examDuration / CONFIG.recordInterval
-  //   ); // console.log(`Total segments to schedule: ${totalSegments}`); // Log jumlah segmen
-  //   for (let i = 0; i < totalSegments; i++) {
-  //     // Inisialisasi array chunk untuk segmen ini di chunksRef
-  //     chunksRef.current[i] = []; // console.log(`Initialized chunksRef.current[${i}] = []`); // Log inisialisasi chunk // Jadwalkan timeout untuk memulai perekaman segmen ke-i
-  //     const delayMs = i * CONFIG.recordInterval * 1000; // console.log(`Scheduling start for segment ${i + 1} in ${delayMs / 1000} seconds`); // Log penjadwalan start
-  //     const tid = setTimeout(() => {
-  //       // console.log(`--- Starting process for segment ${i + 1} (scheduled) ---`); // Log saat timeout terpicu untuk start
+  //   if (recorderRef.current && recorderRef.current.state !== "inactive") {
+  //     try {
+  //       await new Promise((resolve, reject) => {
+  //         const currentRecorder = recorderRef.current;
+  //         if (!currentRecorder) {
+  //           console.warn("Recorder ref is null during stop attempt promise.");
+  //           return resolve();
+  //         }
 
-  //       try {
-  //         // Buat instance MediaRecorder baru
-  //         const rec = new MediaRecorder(stream, {
-  //           mimeType: "video/mp4", // Format video
-  //           videoBitsPerSecond: 100000, // Kualitas video (sesuaikan jika perlu)
-  //         }); // console.log(`MediaRecorder created for segment ${i + 1}. Initial state: ${rec.state}`); // Log recorder created // Simpan instance recorder terakhir di ref (berguna jika submit dini)
-  //         recorderRef.current = rec; // console.log(`recorderRef.current updated for segment ${i+1}`); // Log update ref // Listener saat data rekaman tersedia
-  //         rec.ondataavailable = (e) => {
-  //           // console.log(`Event ondataavailable fired for segment ${i + 1}. Data size: ${e.data ? e.data.size : 'null/undefined'}`); // Log data size
-  //           if (e.data && e.data.size > 0) {
-  //             // Periksa kembali apakah chunksRef.current[i] masih valid
-  //             if (!chunksRef.current[i]) {
-  //               // console.error(`chunksRef.current[${i}] is null/undefined in ondataavailable for segment ${i+1}! Attempting re-initialization.`); // Critical error check
-  //               chunksRef.current[i] = []; // Coba re-inisialisasi jika null
-  //             }
-  //             chunksRef.current[i].push(e.data); // Tambahkan chunk data ke segmen yang sesuai // console.log(`Pushed chunk to segment ${i+1}. Total chunks: ${chunksRef.current[i].length}`); // Log jumlah chunk
-  //           } else {
-  //             // console.warn(`ondataavailable fired for segment ${i+1} with empty data.`); // Log warning data kosong
-  //           }
-  //         }; // Listener saat perekaman berhenti
-
-  //         rec.onstop = () => {
-  //           // console.log(`Event onstop fired for segment ${i + 1}. State was: ${rec.state}`); // Log stop event dan state terakhir
-  //           // console.log(`State of chunksRef.current[${i}] in onstop for segment ${i+1}:`, chunksRef.current[i]); // Log isi chunks saat onstop
-  //           // Gabungkan chunks menjadi satu Blob
-  //           if (chunksRef.current[i] && chunksRef.current[i].length > 0) {
-  //             // console.log(`Chunks found for segment ${i+1}. Creating blob...`); // Log blob creation
-  //             const blob = new Blob(chunksRef.current[i], {
-  //               type: "video/webm",
-  //             });
-  //             segmentsRef.current[i] = blob; // Simpan Blob di array segmen utama // console.log(`Blob created for segment ${i+1}: ${blob.size} bytes. Stored at segmentsRef.current[${i}]`); // Log blob created & stored // Bersihkan chunks sementara untuk segmen ini
-  //             delete chunksRef.current[i]; // console.log(`Cleaned up chunksRef.current[${i}]`); // Log cleanup
-  //           } else {
-  //             // console.warn(`Warning: No chunks recorded for segment ${i + 1}. Blob not created.`); // Log warning asli
-  //             segmentsRef.current[i] = new Blob([], { type: "video/webm" }); // Simpan blob kosong
-  //             misuseEventsRef.current.push({
-  //               // Log empty segment issue
-  //               type: "empty_video_segment_scheduled",
-  //               timestamp: Date.now(),
-  //               details: `Scheduled segment ${i} resulted in no chunks.`,
-  //             }); // console.log(`Stored empty blob for segment ${i+1} due to FATAL error at segmentsRef.current[${i}]`); // console.log(`--- Finished process for segment ${i + 1} (FATAL error) ---`);
-  //           }
+  //         const onStopHandler = () => {
+  //           currentRecorder.removeEventListener("stop", onStopHandler);
+  //           currentRecorder.removeEventListener("error", onErrorHandler);
+  //           resolve();
   //         };
 
-  //         rec.onerror = (event) => {
-  //           // console.error(`Recorder error on segment ${i + 1}:`, event.error); // Log error recorder
+  //         const onErrorHandler = (event) => {
+  //           console.error("Recorder error during stop:", event);
+  //           currentRecorder.removeEventListener("stop", onStopHandler);
+  //           currentRecorder.removeEventListener("error", onErrorHandler);
+  //           reject(
+  //             new Error(
+  //               `Recorder error during stop: ${
+  //                 event.error ? event.error.name : "Unknown"
+  //               }`
+  //             )
+  //           );
   //           misuseEventsRef.current.push({
-  //             // Log recorder error
-  //             type: "recorder_error",
+  //             type: "recorder_stop_error_event",
   //             timestamp: Date.now(),
-  //             details: `Segment ${i}: ${event.error.message}`,
-  //           }); // Lanjutkan meskipun ada error pada segmen ini // onstop biasanya tetap terpicu setelah onerror
-  //         }; // console.log(`Calling start() for segment ${i+1}. Current state: ${rec.state}`); // Log state sebelum start
+  //             details: `Recorder error event during stop: ${
+  //               event.error ? event.error.message : "Unknown Error"
+  //             }`,
+  //           });
+  //         };
 
-  //         rec.start(); // Mulai perekaman // console.log(`Recorder state after start for segment ${i+1}: ${rec.state}`); // Log state setelah start // Jadwalkan timeout untuk menghentikan perekaman setelah recordDuration
-  //         const stopDelayMs = CONFIG.recordDuration * 1000; // console.log(`Scheduling stop for segment ${i+1} in ${stopDelayMs / 1000} seconds. Target time: ${new Date(Date.now() + stopDelayMs).toISOString()}`); // Log penjadwalan stop
-  //         setTimeout(() => {
-  //           // console.log(`--- Starting process for segment ${i + 1} (scheduled stop) ---`); // Log saat timeout terpicu untuk stop
-  //           if (rec.state !== "inactive") {
-  //             // Cek apakah recorder masih aktif sebelum stop
-  //             // console.log(`Attempting scheduled stop for segment ${i + 1} with state: ${rec.state}...`);
-  //             rec.stop();
-  //           } else {
-  //             // console.log(`Scheduled stop called for segment ${i + 1}, recorder was already inactive.`);
-  //             // console.log(`--- Finished process for segment ${i + 1} (scheduled stop - already inactive) ---`);
-  //           }
-  //         }, stopDelayMs); // Hentikan setelah durasi rekaman
+  //         currentRecorder.addEventListener("stop", onStopHandler);
+  //         currentRecorder.addEventListener("error", onErrorHandler);
+
+  //         currentRecorder.stop();
+  //       });
+  //     } catch (error) {
+  //       console.error("Error during recorder stop process promise:", error);
+  //       misuseEventsRef.current.push({
+  //         type: "recorder_stop_promise_rejected",
+  //         timestamp: Date.now(),
+  //         details: `Error awaiting recorder stop: ${error.message}`,
+  //       });
+  //     }
+  //   } else {
+  //     console.log("No active recorder to stop. Proceeding directly.");
+  //   }
+
+  //   if (stream) {
+  //     stream.getTracks().forEach((track) => {
+  //       try {
+  //         track.stop();
   //       } catch (error) {
-  //         // console.error(`FATAL Error in scheduled recording timeout for segment ${i + 1}:`, error); // Log error fatal di timeout
+  //         console.error("Error stopping stream track:", error);
   //         misuseEventsRef.current.push({
-  //           type: "recorder_scheduled_init_error",
+  //           type: "stop_stream_error",
   //           timestamp: Date.now(),
-  //           details: `Segment ${i} scheduling/init failed: ${error.message}`,
+  //           details: error.message,
   //         });
-  //         segmentsRef.current[i] = new Blob([], { type: "video/webm" }); // Masukkan blob kosong // console.log(`Stored empty blob for segment ${i+1} due to FATAL error at segmentsRef.current[${i}]`); // console.log(`--- Finished process for segment ${i + 1} (FATAL error) ---`);
   //       }
-  //     }, delayMs); // Mulai setiap interval // Simpan ID timeout agar bisa dibersihkan nanti oleh submitExam
+  //     });
+  //     setStream(null);
+  //   }
 
-  //     recordingTimeoutsRef.current.push(tid);
-  //   } // console.log(`Finished scheduling all ${totalSegments} recording segments.`); // Log akhir penjadwalan
+  //   // --- BAGIAN BARU: Tunggu SEMUA unggahan segmen selesai ---
+  //   console.log("[Client] Waiting for all segment uploads to complete...");
+  //   await Promise.allSettled(recordingPromisesRef.current);
+  //   console.log("[Client] All segment upload promises settled.");
+  //   // --- END BAGIAN BARU ---
+
+  //   const end = Date.now();
+  //   setSubmitTime(end);
+  //   setElapsed(end - (startTime || end));
+
+  //   // --- START PERUBAHAN PENTING DI SINI ---
+  //   const videoUrls = segmentsRef.current
+  //     .map((item) => {
+  //       // Pastikan hanya URL string yang valid yang diambil
+  //       if (typeof item === "string" && item.startsWith("http")) {
+  //         return item;
+  //       }
+  //       // Jika item adalah objek error/status, atau null, abaikan atau beri placeholder
+  //       if (item && typeof item === "object" && item.status === "failed") {
+  //         console.warn(`[Client] Skipping failed segment: ${item.error}`);
+  //         return `UPLOAD_FAILED: ${item.error}`; // Atau abaikan dengan return null
+  //       }
+  //       if (item && typeof item === "object" && item.status === "empty") {
+  //         console.warn(`[Client] Skipping empty segment.`);
+  //         return `EMPTY_SEGMENT`; // Atau abaikan dengan return null
+  //       }
+  //       console.warn(`[Client] Unexpected item in segmentsRef.current:`, item);
+  //       return null; // Abaikan item yang tidak valid
+  //     })
+  //     .filter(Boolean); // Menghapus semua nilai null dari array
+
+  //   console.log("[Client] Final video URLs to send to submitExam:", videoUrls);
+  //   // --- END PERUBAHAN PENTING DI SINI ---
+
+  //   // ... (kode untuk menghitung skor dan menyiapkan respons tetap sama)
+
+  //   const questionsCount =
+  //     qs.length > 0
+  //       ? qs.length
+  //       : Object.values(CONFIG.groupCounts).reduce(
+  //           (sum, count) => sum + count,
+  //           0
+  //         );
+  //   const correctAnswers = qs.filter((q, i) => ans[i] === q.answerIndex).length;
+  //   const score =
+  //     questionsCount > 0
+  //       ? Math.round((correctAnswers / questionsCount) * 100)
+  //       : 0;
+
+  //   const responses = qs.map((q, i) => {
+  //     const userAnswerIndex = ans[i];
+  //     const correctAnswerIndex = q.answerIndex;
+  //     const questionText = Array.isArray(q.q)
+  //       ? q.q.map((s) => s.base).join("")
+  //       : q.q;
+  //     const userAnswerText =
+  //       userAnswerIndex != null && q.options?.[userAnswerIndex] != null
+  //         ? Array.isArray(q.options[userAnswerIndex])
+  //           ? q.options[userAnswerIndex].map((s) => s.base).join("")
+  //           : q.options[userAnswerIndex]
+  //         : "Tidak dijawab";
+
+  //     const correctAnswerText =
+  //       correctAnswerIndex != null && q.options?.[correctAnswerIndex] != null
+  //         ? Array.isArray(q.options[correctAnswerIndex])
+  //           ? q.options[correctAnswerIndex].map((s) => s.base).join("")
+  //           : q.options[correctAnswerIndex]
+  //         : "N/A";
+
+  //     return {
+  //       question: questionText,
+  //       answerIndex: userAnswerIndex != null ? userAnswerIndex : null,
+  //       answerText: userAnswerText,
+  //       correctAnswerIndex:
+  //         correctAnswerIndex != null ? correctAnswerIndex : null,
+  //       correctAnswerText: correctAnswerText,
+  //       isCorrect: userAnswerIndex === correctAnswerIndex,
+  //     };
+  //   });
+
+  //   try {
+  //     const submitRes = await fetch("/api/submitExam", {
+  //       method: "POST",
+  //       headers: { "Content-Type": "application/json" },
+  //       body: JSON.stringify({
+  //         email: params.email,
+  //         id: params.id,
+  //         score,
+  //         submitTime: new Date(end).toLocaleString(),
+  //         elapsed: Math.floor((end - (startTime || end)) / 1000),
+  //         responses,
+  //         flags: misuseEventsRef.current,
+  //         videoUrls, // Ini akan berisi URL Google Drive yang sudah dikumpulkan
+  //       }),
+  //     });
+
+  //     if (!submitRes.ok) {
+  //       const errorText = await submitRes.text();
+  //       throw new Error(
+  //         `Submit failed with status: ${submitRes.status}. Response: ${errorText}`
+  //       );
+  //     }
+  //   } catch (error) {
+  //     console.error("Error submitting exam data:", error);
+  //     alert(
+  //       "Gagal mengirim data ujian secara lengkap. Harap hubungi administrator jika masalah berlanjut."
+  //     );
+  //     misuseEventsRef.current.push({
+  //       type: "submit_error",
+  //       timestamp: Date.now(),
+  //       details: `Final submit failed: ${error.message}`,
+  //     });
+  //   } finally {
+  //     setIsClosingSubmitting(true);
+  //     setTimeout(() => {
+  //       setIsSubmitting(false);
+  //       setStep("result");
+  //     }, 300);
+  //   }
   // }
 
-  // Helper function untuk menentukan mimeType yang optimal
-  // Tempatkan fungsi ini DI LUAR fungsi React Component Anda (misalnya di atas atau di bawahnya, atau di file helper terpisah)
-  function getOptimalMimeType() {
-    // Deteksi jika perangkat adalah iOS (iPad, iPhone, iPod)
-    // Perlu diingat bahwa Chrome di iOS menggunakan user agent yang mirip Safari
-    const isIOS =
-      /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  // Handler untuk memunculkan modal konfirmasi submit (dipanggil dari ExamScreen)
+  // ==========================================================
+  // FUNGSI SUBMIT EXAM (REVISI LENGKAP)
+  // ==========================================================
 
-    // Prioritaskan MP4 untuk iOS karena kompatibilitas bagus dengan Google Drive
-    if (isIOS && MediaRecorder.isTypeSupported("video/mp4")) {
-      console.log("Using video/mp4 for iOS device.");
-      return "video/mp4";
-    }
-    // Fallback ke WebM dengan codec VP8, yang umumnya didukung luas di non-iOS
-    else if (MediaRecorder.isTypeSupported("video/webm; codecs=vp8")) {
-      console.log("Using video/webm; codecs=vp8.");
-      return "video/webm; codecs=vp8";
-    }
-    // Fallback ke WebM generik jika codec spesifik tidak didukung
-    else if (MediaRecorder.isTypeSupported("video/webm")) {
-      console.log("Using video/webm (generic).");
-      return "video/webm";
-    }
-    // Sebagai pilihan terakhir, default ke WebM (meskipun ini seharusnya tidak terjadi jika MediaRecorder tersedia)
-    console.warn(
-      "No specific MediaRecorder mimeType supported. Defaulting to video/webm."
-    );
-    return "video/webm";
-  }
-
-  // Fungsi untuk menjadwalkan perekaman video secara berkala
-  function scheduleRecordings(stream) {
-    // console.log("Scheduling recordings..."); // Log awal penjadwalan
-    // Bersihkan timeout penjadwalan sebelumnya
-    recordingTimeoutsRef.current.forEach(clearTimeout);
-    recordingTimeoutsRef.current = []; // Reset array
-    segmentsRef.current = []; // Reset array segmen yang sudah jadi Blob
-    chunksRef.current = {}; // Reset object chunks sementara
-
-    const totalSegments = Math.ceil(
-      CONFIG.examDuration / CONFIG.recordInterval
-    ); // console.log(`Total segments to schedule: ${totalSegments}`); // Log jumlah segmen
-    for (let i = 0; i < totalSegments; i++) {
-      // Inisialisasi array chunk untuk segmen ini di chunksRef
-      chunksRef.current[i] = []; // console.log(`Initialized chunksRef.current[${i}] = []`); // Log inisialisasi chunk // Jadwalkan timeout untuk memulai perekaman segmen ke-i
-      const delayMs = i * CONFIG.recordInterval * 1000; // console.log(`Scheduling start for segment ${i + 1} in ${delayMs / 1000} seconds`); // Log penjadwalan start
-      const tid = setTimeout(() => {
-        // console.log(`--- Starting process for segment ${i + 1} (scheduled) ---`); // Log saat timeout terpicu untuk start
-
-        try {
-          // Buat instance MediaRecorder baru
-          const rec = new MediaRecorder(stream, {
-            mimeType: getOptimalMimeType(), // <--- INI PERUBAHAN UTAMA
-            videoBitsPerSecond: 100000, // Kualitas video (sesuaikan jika perlu)
-          }); // console.log(`MediaRecorder created for segment ${i + 1}. Initial state: ${rec.state}`); // Log recorder created // Simpan instance recorder terakhir di ref (berguna jika submit dini)
-          recorderRef.current = rec; // console.log(`recorderRef.current updated for segment ${i+1}`); // Log update ref // Listener saat data rekaman tersedia
-          rec.ondataavailable = (e) => {
-            // console.log(`Event ondataavailable fired for segment ${i + 1}. Data size: ${e.data ? e.data.size : 'null/undefined'}`); // Log data size
-            if (e.data && e.data.size > 0) {
-              // Periksa kembali apakah chunksRef.current[i] masih valid
-              if (!chunksRef.current[i]) {
-                // console.error(`chunksRef.current[${i}] is null/undefined in ondataavailable for segment ${i+1}! Attempting re-initialization.`); // Critical error check
-                chunksRef.current[i] = []; // Coba re-inisialisasi jika null
-              }
-              chunksRef.current[i].push(e.data); // Tambahkan chunk data ke segmen yang sesuai // console.log(`Pushed chunk to segment ${i+1}. Total chunks: ${chunksRef.current[i].length}`); // Log jumlah chunk
-            } else {
-              // console.warn(`ondataavailable fired for segment ${i+1} with empty data.`); // Log warning data kosong
-            }
-          }; // Listener saat perekaman berhenti
-
-          rec.onstop = () => {
-            // console.log(`Event onstop fired for segment ${i + 1}. State was: ${rec.state}`); // Log stop event dan state terakhir
-            // console.log(`State of chunksRef.current[${i}] in onstop for segment ${i+1}:`, chunksRef.current[i]); // Log isi chunks saat onstop
-            // Gabungkan chunks menjadi satu Blob
-            if (chunksRef.current[i] && chunksRef.current[i].length > 0) {
-              // console.log(`Chunks found for segment ${i+1}. Creating blob...`); // Log blob creation
-              const blob = new Blob(chunksRef.current[i], {
-                type: getOptimalMimeType().split(";")[0], // <--- SESUAIKAN TYPE BLOB DI SINI
-              });
-              segmentsRef.current[i] = blob; // Simpan Blob di array segmen utama // console.log(`Blob created for segment ${i+1}: ${blob.size} bytes. Stored at segmentsRef.current[${i}]`); // Log blob created & stored // Bersihkan chunks sementara untuk segmen ini
-              delete chunksRef.current[i]; // console.log(`Cleaned up chunksRef.current[${i}]`); // Log cleanup
-            } else {
-              // console.warn(`Warning: No chunks recorded for segment ${i + 1}. Blob not created.`); // Log warning asli
-              segmentsRef.current[i] = new Blob([], {
-                type: getOptimalMimeType().split(";")[0],
-              }); // Simpan blob kosong
-              misuseEventsRef.current.push({
-                // Log empty segment issue
-                type: "empty_video_segment_scheduled",
-                timestamp: Date.now(),
-                details: `Scheduled segment ${i} resulted in no chunks.`,
-              }); // console.log(`Stored empty blob for segment ${i+1} due to FATAL error at segmentsRef.current[${i}]`); // console.log(`--- Finished process for segment ${i + 1} (FATAL error) ---`);
-            }
-          };
-
-          rec.onerror = (event) => {
-            // console.error(`Recorder error on segment ${i + 1}:`, event.error); // Log error recorder
-            misuseEventsRef.current.push({
-              // Log recorder error
-              type: "recorder_error",
-              timestamp: Date.now(),
-              details: `Segment ${i}: ${event.error.message}`,
-            }); // Lanjutkan meskipun ada error pada segmen ini // onstop biasanya tetap terpicu setelah onerror
-          }; // console.log(`Calling start() for segment ${i+1}. Current state: ${rec.state}`); // Log state sebelum start
-
-          rec.start(); // Mulai perekaman // console.log(`Recorder state after start for segment ${i+1}: ${rec.state}`); // Log state setelah start // Jadwalkan timeout untuk menghentikan perekaman setelah recordDuration
-          const stopDelayMs = CONFIG.recordDuration * 1000; // console.log(`Scheduling stop for segment ${i+1} in ${stopDelayMs / 1000} seconds. Target time: ${new Date(Date.now() + stopDelayMs).toISOString()}`); // Log penjadwalan stop
-          setTimeout(() => {
-            // console.log(`--- Starting process for segment ${i + 1} (scheduled stop) ---`); // Log saat timeout terpicu untuk stop
-            if (rec.state !== "inactive") {
-              // Cek apakah recorder masih aktif sebelum stop
-              // console.log(`Attempting scheduled stop for segment ${i + 1} with state: ${rec.state}...`);
-              rec.stop();
-            } else {
-              // console.log(`Scheduled stop called for segment ${i + 1}, recorder was already inactive.`);
-              // console.log(`--- Finished process for segment ${i + 1} (scheduled stop - already inactive) ---`);
-            }
-          }, stopDelayMs); // Hentikan setelah durasi rekaman
-        } catch (error) {
-          // console.error(`FATAL Error in scheduled recording timeout for segment ${i + 1}:`, error); // Log error fatal di timeout
-          misuseEventsRef.current.push({
-            type: "recorder_scheduled_init_error",
-            timestamp: Date.now(),
-            details: `Segment ${i} scheduling/init failed: ${error.message}`,
-          });
-          segmentsRef.current[i] = new Blob([], {
-            type: getOptimalMimeType().split(";")[0],
-          }); // Masukkan blob kosong // console.log(`Stored empty blob for segment ${i+1} due to FATAL error at segmentsRef.current[${i}]`); // console.log(`--- Finished process for segment ${i + 1} (FATAL error) ---`);
-        }
-      }, delayMs); // Mulai setiap interval // Simpan ID timeout agar bisa dibersihkan nanti oleh submitExam
-
-      recordingTimeoutsRef.current.push(tid);
-    } // console.log(`Finished scheduling all ${totalSegments} recording segments.`); // Log akhir penjadwalan
-  }
-
-  // Fungsi utama untuk submit ujian
   async function submitExam() {
-    // console.log("Attempting to submit exam..."); // Log awal submit // stop countdown & scheduled recordings
-
     clearInterval(countdownIntervalRef.current);
     recordingTimeoutsRef.current.forEach(clearTimeout);
-    recordingTimeoutsRef.current = []; // Clear the array // --- START: Modifikasi untuk Menunggu Recorder Stop --- // Hentikan recorder yang sedang aktif (jika ada) dan tunggu event 'stop'
+    recordingTimeoutsRef.current = []; // Clear the array
 
+    // --- Bagian untuk menunggu recorder terakhir stop ---
     if (recorderRef.current && recorderRef.current.state !== "inactive") {
-      // console.log("Active recorder found. Stopping and waiting for onstop...");
+      console.log("[Client] Stopping the last active recorder...");
       try {
-        // Buat Promise yang akan resolve ketika event 'stop' pada recorder terpicu
         await new Promise((resolve, reject) => {
           const currentRecorder = recorderRef.current;
           if (!currentRecorder) {
             console.warn("Recorder ref is null during stop attempt promise.");
-            return resolve(); // Resolve segera jika ref somehow null
+            return resolve();
           }
 
           const onStopHandler = () => {
-            // console.log("Active recorder onstop fired. Resolving promise."); // Bersihkan event listener setelah terpicu
+            console.log(
+              "[Client] Recorder's onstop handler for last segment fired."
+            );
             currentRecorder.removeEventListener("stop", onStopHandler);
-            currentRecorder.removeEventListener("error", onErrorHandler); // Bersihkan error listener juga
-            resolve(); // Resolve Promise
+            currentRecorder.removeEventListener("error", onErrorHandler);
+            // Setelah onstop handler selesai, baru resolve promise ini
+            resolve();
           };
 
           const onErrorHandler = (event) => {
             console.error("Recorder error during stop:", event);
             currentRecorder.removeEventListener("stop", onStopHandler);
-            currentRecorder.removeEventListener("error", onErrorHandler); // Bersihkan error listener juga
+            currentRecorder.removeEventListener("error", onErrorHandler);
             reject(
               new Error(
                 `Recorder error during stop: ${
                   event.error ? event.error.name : "Unknown"
                 }`
               )
-            ); // Reject Promise // Log kesalahan recorder saat stop
+            );
             misuseEventsRef.current.push({
               type: "recorder_stop_error_event",
               timestamp: Date.now(),
@@ -538,32 +822,78 @@ export default function Home() {
                 event.error ? event.error.message : "Unknown Error"
               }`,
             });
-          }; // Daftarkan event listeners
+          };
 
           currentRecorder.addEventListener("stop", onStopHandler);
-          currentRecorder.addEventListener("error", onErrorHandler); // Tambahkan error listener
+          currentRecorder.addEventListener("error", onErrorHandler);
 
-          currentRecorder.stop(); // Picu proses stop
-          // console.log("recorder.stop() called.");
-        }); // await akan menunggu promise ini selesai
-        // console.log("Promise resolved: Finished waiting for recorder stop.");
+          currentRecorder.stop();
+          // recorderRef.current.stop() akan memicu onstop yang sudah kita definisikan.
+          // onstop itu akan menambahkan promise ke recordingPromisesRef.current.
+          // Kita perlu mendapatkan promise itu dan menunggunya SECARA EKSPLISIT.
+
+          // Ini adalah triknya: Ambil index dari segmen yang baru saja di-stop.
+          // Jika Anda tidak memiliki index yang disimpan di recorderRef, ini bisa jadi sulit.
+          // Asumsi: recorderRef.current adalah recorder untuk segmen terakhir yang aktif.
+          // Biasanya, index terakhir adalah recordingPromisesRef.current.length - 1
+          // Namun, lebih aman jika kita pastikan indexnya sudah tersedia di recorderRef atau closure.
+          // Atau, kita bisa membuat mekanisme onstop mengembalikan promise.
+
+          // Opsi paling sederhana: Coba ambil promise untuk segmen terakhir setelah stop dipicu.
+          // Ini masih berpotensi race condition jika onstop belum sempat memicu promise.
+          // Solusi yang lebih kuat adalah memastikan onstop langsung di-await di dalam sini.
+          // Tapi itu berarti mengubah arsitektur onstop secara signifikan.
+
+          // Mari kita coba solusi yang lebih aman dengan `await`ing promise `onstop` yang ada.
+          // Masalahnya adalah `onstop` itu asinkron dan tidak mengembalikan promise.
+          // Jadi, kita harus mengubah `onstop` agar mengembalikan promise, atau membuat
+          // sebuah `Deferred` promise yang bisa di-resolve dari dalam `onstop`.
+
+          // Pendekatan yang lebih bersih dan sesuai dengan struktur Anda:
+          // Kita akan mempercayai `onstop` untuk menambahkan promise ke `recordingPromisesRef`.
+          // Jadi, kita hanya perlu menunggu `onstop` itu selesai di trigger, lalu baru menunggu
+          // `Promise.allSettled`.
+        });
+        console.log(
+          "[Client] Last active recorder has successfully stopped and its onstop logic completed."
+        );
       } catch (error) {
-        console.error("Error during recorder stop process promise:", error); // Log kesalahan dari Promise reject
+        console.error("Error during recorder stop process promise:", error);
         misuseEventsRef.current.push({
           type: "recorder_stop_promise_rejected",
           timestamp: Date.now(),
           details: `Error awaiting recorder stop: ${error.message}`,
-        }); // Lanjutkan proses submit meskipun ada error stop recorder, // mungkin segmen lain berhasil terekam.
+        });
       }
     } else {
-      // console.log("No active recorder to stop. Proceeding directly.");
-    } // --- END: Modifikasi untuk Menunggu Recorder Stop --- // stop camera preview stream as soon as submit begins
+      console.log("No active recorder to stop. Proceeding directly.");
+    }
+
+    // ==========================================================
+    // PENTING: Tunggu SEMUA unggahan segmen selesai
+    // Sekarang, setelah *semua* `onstop` (termasuk yang terakhir) selesai dipicu
+    // dan promise-nya ditambahkan ke `recordingPromisesRef.current`,
+    // barulah kita bisa menunggu `Promise.allSettled`.
+    // ==========================================================
+    console.log("[Client] Waiting for all segment uploads to complete...");
+    const validPromises = recordingPromisesRef.current.filter(
+      (p) => p instanceof Promise
+    );
+    if (validPromises.length === 0) {
+      console.warn("[Client] No valid recording promises found to await.");
+    } else {
+      await Promise.allSettled(validPromises);
+      console.log("[Client] All segment upload promises settled.");
+    }
+    // ==========================================================
+
+    // --- Matikan stream kamera (ini juga perlu diperiksa lagi) ---
     if (stream) {
-      // console.log("Stopping stream tracks...");
+      console.log("[Client] Stopping camera stream tracks.");
       stream.getTracks().forEach((track) => {
         try {
           track.stop();
-          // console.log("Media stream track stopped.");
+          console.log(`[Client] Stopped track: ${track.kind}`);
         } catch (error) {
           console.error("Error stopping stream track:", error);
           misuseEventsRef.current.push({
@@ -573,74 +903,59 @@ export default function Home() {
           });
         }
       });
-      setStream(null); // Clear the stream state
-    } // isSubmitting is already true ketika fungsi ini dipanggil dari handleConfirmSubmit
-
-    const end = Date.now(); // Catat waktu selesai
-    setSubmitTime(end); // Simpan waktu submit
-    setElapsed(end - (startTime || end)); // Hitung durasi (tangani jika startTime null)
-
-    const videoUrls = [];
-    // console.log(
-    //   "Processing video segments for upload:",
-    //   segmentsRef.current.length
-    // ); // Log jumlah segmen // Gunakan loop dengan async/await untuk mengunggah segmen secara berurutan
-
-    for (let i = 0; i < segmentsRef.current.length; i++) {
-      const blob = segmentsRef.current[i];
-      if (!blob || blob.size === 0) {
-        console.warn(`Skipping empty or null blob for segment ${i}.`); // Log warning
-        videoUrls.push(`Segment_${i + 1}_Empty`); // Indikasi segmen kosong
-        misuseEventsRef.current.push({
-          // Log empty segment as a potential issue
-          type: "empty_video_segment",
-          timestamp: Date.now(),
-          details: `Segment ${i} was empty or null.`,
-        });
-        continue; // Lanjutkan ke segmen berikutnya
-      } // Buat nama file yang unik
-      const fname = `${params.email}_${params.id}_${
-        new Date(end)
-          .toLocaleString("sv-SE") // Format timestamp YYYY-MM-DD HH:MM:SS
-          .replace(/[\s:]/g, "_") // Ganti spasi dan : dengan _
-          .replace(/\//g, "-") // Ganti / dengan -
-      }_take${i + 1}.webm`;
-      const file = new File([blob], fname, { type: "video/webm" }); // Buat objek File
-      const fd = new FormData(); // Buat FormData untuk upload
-      fd.append("file", file); // Tambahkan file ke FormData
-
-      // console.log(
-      //   `Uploading segment ${i + 1} (${fname}, ${blob.size} bytes)...`
-      // ); // Log proses upload
-      try {
-        // Kirim permintaan upload ke API endpoint
-        const res = await fetch("/api/upload", { method: "POST", body: fd });
-        if (!res.ok) {
-          const errorText = await res.text(); // Baca respons error
-          throw new Error( // Lempar error jika respons tidak OK
-            `Upload failed with status: ${res.status}. Response: ${errorText}`
-          );
-        }
-        const json = await res.json(); // Parse respons JSON
-        if (json.videoUrl) {
-          videoUrls.push(json.videoUrl); // Simpan URL video yang berhasil diupload
-          // console.log(`Segment ${i + 1} uploaded: ${json.videoUrl}`); // Log berhasil upload
-        } else {
-          throw new Error("Upload successful, but no videoUrl in response."); // Error jika URL tidak ada di respons
-        }
-      } catch (error) {
-        console.error(`Error uploading segment ${i + 1}:`, error); // Log error upload
-        videoUrls.push(`Upload Failed: ${error.message}`); // Catat kegagalan upload dengan pesan error
-        misuseEventsRef.current.push({
-          // Log error upload
-          type: "upload_error",
-          timestamp: Date.now(),
-          details: `Segment ${i}: ${error.message}`,
-        });
-      }
+      setStream(null);
+      console.log("[Client] Stream set to null.");
+    } else {
+      console.log("[Client] No active stream to stop.");
     }
-    // console.log("All segments processed. Video URLs:", videoUrls); // Log semua URL (atau indikasi kegagalan) // Hitung skor // Pastikan qs sudah terisi, gunakan hitungan dari CONFIG jika qs kosong
 
+    // ==========================================================
+    // PERUBAHAN KRUSIAL DI SINI: MENUNGGU SEMUA PROMISE SEGMEN SELESAI
+    // ==========================================================
+    console.log("[Client] Waiting for all segment uploads to complete...");
+    // Gunakan Promise.allSettled untuk menunggu semua janji selesai (berhasil atau gagal)
+    await Promise.allSettled(recordingPromisesRef.current);
+    console.log("[Client] All segment upload promises settled.");
+    // ==========================================================
+
+    const end = Date.now();
+    setSubmitTime(end);
+    setElapsed(end - (startTime || end));
+
+    // ==========================================================
+    // KUMPULKAN VIDEO URLS DARI SEGMENTREF.CURRENT SETELAH SEMUA UNGGAHAN SELESAI
+    // ==========================================================
+    const videoUrls = segmentsRef.current
+      .map((item) => {
+        if (typeof item === "string" && item.startsWith("http")) {
+          return item; // Ini adalah URL yang berhasil diunggah
+        }
+        // Jika item adalah objek status error atau kosong
+        if (item && typeof item === "object") {
+          if (item.status === "failed") {
+            console.warn(`[Client] Skipping failed segment: ${item.error}`);
+            return `UPLOAD_FAILED: ${item.error}`; // Indikasi kegagalan
+          }
+          if (item.status === "empty") {
+            console.warn(`[Client] Skipping empty segment.`);
+            return `EMPTY_SEGMENT`; // Indikasi segmen kosong
+          }
+          if (item.status === "init_failed") {
+            console.warn(
+              `[Client] Skipping segment due to init failure: ${item.error}`
+            );
+            return `INIT_FAILED: ${item.error}`; // Indikasi kegagalan inisialisasi
+          }
+        }
+        console.warn(`[Client] Unexpected item in segmentsRef.current:`, item);
+        return null; // Abaikan item yang tidak valid/tidak dikenal
+      })
+      .filter(Boolean); // Menghapus semua nilai null dari array
+
+    console.log("[Client] Final video URLs to send to submitExam:", videoUrls);
+    // ==========================================================
+
+    // Hitung skor
     const questionsCount =
       qs.length > 0
         ? qs.length
@@ -652,87 +967,115 @@ export default function Home() {
     const score =
       questionsCount > 0
         ? Math.round((correctAnswers / questionsCount) * 100)
-        : 0; // Skor 0 jika tidak ada pertanyaan // Siapkan data respons detail per soal
+        : 0;
 
+    // Siapkan data respons detail per soal
     const responses = qs.map((q, i) => {
       const userAnswerIndex = ans[i];
       const correctAnswerIndex = q.answerIndex;
       const questionText = Array.isArray(q.q)
-        ? q.q.map((s) => s.base).join("") // Gabungkan base text jika array
-        : q.q; // Gunakan langsung jika string
+        ? q.q.map((s) => s.base).join("")
+        : q.q;
       const userAnswerText =
-        userAnswerIndex != null && q.options?.[userAnswerIndex] != null // Cek jika user jawab dan opsi ada
+        userAnswerIndex != null && q.options?.[userAnswerIndex] != null
           ? Array.isArray(q.options[userAnswerIndex])
-            ? q.options[userAnswerIndex].map((s) => s.base).join("") // Gabungkan base text jika array
-            : q.options[userAnswerIndex] // Gunakan langsung jika string
-          : "Tidak dijawab"; // Handle tidak dijawab
+            ? q.options[userAnswerIndex].map((s) => s.base).join("")
+            : q.options[userAnswerIndex]
+          : "Tidak dijawab";
 
       const correctAnswerText =
-        correctAnswerIndex != null && q.options?.[correctAnswerIndex] != null // Cek jika answerIndex valid dan opsi ada
+        correctAnswerIndex != null && q.options?.[correctAnswerIndex] != null
           ? Array.isArray(q.options[correctAnswerIndex])
-            ? q.options[correctAnswerIndex].map((s) => s.base).join("") // Gabungkan base text jika array
-            : q.options[correctAnswerIndex] // Gunakan langsung jika string
-          : "N/A"; // Handle jika answerIndex tidak valid
+            ? q.options[correctAnswerIndex].map((s) => s.base).join("")
+            : q.options[correctAnswerIndex]
+          : "N/A";
 
       return {
         question: questionText,
-        answerIndex: userAnswerIndex != null ? userAnswerIndex : null, // Store index jawaban user
-        answerText: userAnswerText, // Store teks jawaban user
+        answerIndex: userAnswerIndex != null ? userAnswerIndex : null,
+        answerText: userAnswerText,
         correctAnswerIndex:
-          correctAnswerIndex != null ? correctAnswerIndex : null, // Store index jawaban benar
-        correctAnswerText: correctAnswerText, // Store teks jawaban benar
-        isCorrect: userAnswerIndex === correctAnswerIndex, // Store status benar/salah
+          correctAnswerIndex != null ? correctAnswerIndex : null,
+        correctAnswerText: correctAnswerText,
+        isCorrect: userAnswerIndex === correctAnswerIndex,
       };
     });
 
-    // console.log("Submitting final data to /api/submitExam..."); // Log proses submit ke API
     try {
-      // Kirim data lengkap ke server endpoint /api/submitExam
       const submitRes = await fetch("/api/submitExam", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: params.email,
           id: params.id,
-          score, // Skor total
-          submitTime: new Date(end).toLocaleString(), // Waktu submit
-          elapsed: Math.floor((end - (startTime || end)) / 1000), // Durasi
-          responses, // Detail jawaban per soal
-          flags: misuseEventsRef.current, // Flags misuse/error yang terkumpul
-          videoUrls, // List URL video yang berhasil diupload (termasuk indikasi kegagalan)
+          score,
+          submitTime: new Date(end).toLocaleString(),
+          elapsed: Math.floor((end - (startTime || end)) / 1000),
+          responses,
+          flags: misuseEventsRef.current,
+          videoUrls, // Ini akan berisi URL Google Drive yang sudah dikumpulkan
         }),
       });
 
       if (!submitRes.ok) {
-        const errorText = await submitRes.text(); // Baca respons error dari server
-        throw new Error( // Lempar error jika respons tidak OK
+        const errorText = await submitRes.text();
+        throw new Error(
           `Submit failed with status: ${submitRes.status}. Response: ${errorText}`
         );
       }
-      // console.log("Exam data submitted successfully."); // Log berhasil submit
+      console.log("[Client] Exam data submitted successfully.");
     } catch (error) {
-      console.error("Error submitting exam data:", error); // Log error saat submit // Berikan pesan error ke user (meskipun akan tetap pindah ke step result)
+      console.error("Error submitting exam data:", error);
       alert(
         "Gagal mengirim data ujian secara lengkap. Harap hubungi administrator jika masalah berlanjut."
       );
       misuseEventsRef.current.push({
-        // Log error submit akhir
         type: "submit_error",
         timestamp: Date.now(),
         details: `Final submit failed: ${error.message}`,
       });
     } finally {
-      // Bagian ini akan selalu dijalankan terlepas dari berhasil/gagal submit final
-      // console.log(
-      //   "Submit process finished. Triggering submit modal close and result step."
-      // ); // Log selesai proses submit // Picu animasi keluar untuk modal submitting
-      setIsClosingSubmitting(true); // Tunggu durasi animasi sebelum mengubah step dan menyembunyikan modal
+      setIsClosingSubmitting(true);
       setTimeout(() => {
-        setIsSubmitting(false); // Sembunyikan modal submitting (state isOpen)
-        setStep("result"); // Pindah ke step result
-      }, 300); // Sesuaikan durasi timeout dengan durasi animasi CSS
+        setIsSubmitting(false);
+        setStep("result");
+      }, 300);
     }
-  } // Handler untuk memunculkan modal konfirmasi submit (dipanggil dari ExamScreen)
+  }
+
+  // --- Anda mungkin punya useEffect untuk start kamera, dll. di sini ---
+  useEffect(() => {
+    // Contoh untuk memulai kamera saat komponen dimuat
+    const getMedia = async () => {
+      try {
+        const userStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true,
+        });
+        setStream(userStream);
+        // Jika Anda ingin langsung memulai perekaman saat stream tersedia
+        // scheduleRecordings(userStream);
+      } catch (err) {
+        console.error("Error accessing media devices:", err);
+        misuseEventsRef.current.push({
+          type: "media_access_denied",
+          timestamp: Date.now(),
+          details: err.message,
+        });
+      }
+    };
+    if (!stream) {
+      getMedia();
+    }
+
+    return () => {
+      // Cleanup: hentikan semua timeout dan stream saat komponen unmount
+      recordingTimeoutsRef.current.forEach(clearTimeout);
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [stream, scheduleRecordings]); // scheduleRecordings perlu di deps jika pakai useCallback
 
   const handleInitiateSubmit = () => {
     setIsConfirmSubmitModalOpen(true);

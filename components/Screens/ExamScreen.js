@@ -39,6 +39,7 @@ function ExamScreen({
             muted
             className="w-full h-full object-cover transform scale-x-[-1]" // Video akan mengisi penuh wrapper div
           />
+
           <div className="absolute top-1 right-1 z-10 flex items-center bg-black bg-opacity-50 rounded px-1 py-0.5">
             <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse mr-1"></div>
             <span className="text-white text-xs font-bold">REC</span>
