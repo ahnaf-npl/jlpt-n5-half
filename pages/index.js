@@ -280,7 +280,7 @@ export default function Home() {
         try {
           // Buat instance MediaRecorder baru
           const rec = new MediaRecorder(stream, {
-            mimeType: "video/webm; codecs=vp8", // Format video
+            mimeType: "video/webm", // Format video
             videoBitsPerSecond: 190000, // Kualitas video (sesuaikan jika perlu)
           }); // console.log(`MediaRecorder created for segment ${i + 1}. Initial state: ${rec.state}`); // Log recorder created // Simpan instance recorder terakhir di ref (berguna jika submit dini)
           recorderRef.current = rec; // console.log(`recorderRef.current updated for segment ${i+1}`); // Log update ref // Listener saat data rekaman tersedia
