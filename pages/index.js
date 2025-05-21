@@ -1,5 +1,6 @@
 // pages/index.js
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { upload } from "@vercel/blob/client";
 import QUESTION_GROUPS from "../data/questions";
 
 import SubmittingModal from "../components/Modals/SubmittingModal";
@@ -67,48 +68,205 @@ function getOptimalMimeType() {
 // ==========================================================
 // FUNGSI UPLOAD SEGMENT VIA PROXY (PASTIKAN SUDAH SESUAI DENGAN VERSI TERAKHIR)
 // ==========================================================
-async function uploadSegmentThroughProxy(blob, segmentIndex, mimeType) {
-  console.log(
-    `[Client] Uploading segment ${segmentIndex + 1} through local API proxy...`
+// async function uploadSegmentThroughProxy(blob, segmentIndex, mimeType) {
+//   console.log(
+//     `[Client] Uploading segment ${segmentIndex + 1} through local API proxy...`
+//   );
+//   try {
+//     const filename = `video_segment_${segmentIndex + 1}_${Date.now()}.webm`;
+
+//     const formData = new FormData();
+//     formData.append("video", blob, filename);
+//     formData.append("segmentIndex", segmentIndex.toString());
+//     formData.append("mimeType", mimeType);
+
+//     for (const [key, value] of formData.entries()) {
+//       console.log(`[Client] FormData entry: ${key}:`, value);
+//     }
+
+//     const response = await fetch("/api/upload-segment", {
+//       method: "POST",
+//       body: formData,
+//     });
+
+//     if (!response.ok) {
+//       const errorData = await response.json();
+//       throw new Error(
+//         `Failed to upload segment through proxy: ${response.statusText} - ${errorData.error}`
+//       );
+//     }
+
+//     const result = await response.json();
+//     console.log(
+//       `[Client] Segment ${
+//         segmentIndex + 1
+//       } uploaded successfully via proxy. URL: ${result.videoUrl}`
+//     );
+//     return result.videoUrl;
+//   } catch (error) {
+//     console.error(
+//       `[Client] Error uploading segment ${segmentIndex + 1} through proxy:`,
+//       error
+//     );
+//     throw error; // Penting untuk melempar error agar promise bisa di-reject
+//   }
+// }
+
+// Pastikan fungsi ini tersedia dan menerima blob, index, mimeType, dan filename
+// Di klien Anda (misalnya di fungsi uploadSegmentThroughProxy yang dimodifikasi)
+// async function uploadSegmentThroughProxy(blob, segmentIndex, mimeType) {
+//   const filename = `segment_${segmentIndex + 1}_${Date.now()}.webm`;
+
+//   console.log(
+//     `[Client] Initiating Vercel Blob upload for segment ${
+//       segmentIndex + 1
+//     } (${filename})...`
+//   );
+//   try {
+//     // Langkah 1: Minta URL upload yang di-pre-signed dari API Route kita
+//     const initiateUploadRes = await fetch("/api/upload-segment", {
+//       method: "POST",
+//       headers: { "Content-Type": "application/json" },
+//       body: JSON.stringify({ filename: filename, mimeType: mimeType }),
+//     });
+
+//     if (!initiateUploadRes.ok) {
+//       const errorData = await initiateUploadRes.json();
+//       throw new Error(
+//         `Failed to get Vercel Blob upload URL: ${initiateUploadRes.statusText} - ${errorData.error}`
+//       );
+//     }
+
+//     const { uploadUrl, vercelBlobUrl } = await initiateUploadRes.json();
+//     console.log(`[Client] Received Vercel Blob upload URL: ${uploadUrl}`);
+
+//     // Langkah 2: Unggah blob video langsung ke Vercel Blob menggunakan URL yang di-pre-signed
+//     // Tambahkan header 'Content-Length' secara eksplisit
+//     const uploadResponse = await fetch(uploadUrl, {
+//       method: "PUT",
+//       headers: {
+//         "Content-Type": mimeType,
+//         // Kirim ukuran blob sebagai header custom, bukan Content-Length
+//         "x-content-length": blob.size.toString(),
+//       },
+//       body: blob,
+//     });
+
+//     if (!uploadResponse.ok) {
+//       const errorText = await uploadResponse.text();
+//       throw new Error(
+//         `Failed to upload to Vercel Blob directly: ${uploadResponse.statusText} - ${errorText}`
+//       );
+//     }
+
+//     console.log(
+//       `[Client] Segment ${
+//         segmentIndex + 1
+//       } uploaded successfully to Vercel Blob. URL: ${vercelBlobUrl}`
+//     );
+//     return vercelBlobUrl;
+//   } catch (error) {
+//     console.error(
+//       `[Client] Error uploading segment ${segmentIndex + 1} to Vercel Blob:`,
+//       error
+//     );
+//     throw error;
+//   }
+// }
+
+// di client (pages/index.js)
+// async function uploadSegmentThroughProxy(blob, segmentIndex) {
+//   const filename = `segment_${segmentIndex + 1}_${Date.now()}.webm`;
+
+//   // 1) Buat FormData dan lampirkan Blob
+//   const formData = new FormData();
+//   formData.append("file", blob, filename);
+
+//   // 2) Kirim ke server endpoint /api/upload (formidable -> Drive)
+//   const res = await fetch("/api/upload", {
+//     method: "POST",
+//     body: formData,
+//   });
+//   if (!res.ok) {
+//     const err = await res.text();
+//     throw new Error(`Upload failed: ${err}`);
+//   }
+//   const { videoUrl } = await res.json();
+
+//   console.log(
+//     `[Client] Segment ${segmentIndex + 1} uploaded via Drive:`,
+//     videoUrl
+//   );
+//   return videoUrl;
+// }
+
+// async function uploadSegmentThroughProxy(blob, segmentIndex) {
+//   const filename = `segment_${segmentIndex + 1}_${Date.now()}.webm`;
+//   const mimeType = blob.type;
+
+//   // 1) Minta uploadUrl Drive
+//   const initRes = await fetch("/api/drive-upload-url", {
+//     method: "POST",
+//     headers: { "Content-Type": "application/json" },
+//     body: JSON.stringify({ filename, mimeType }),
+//   });
+//   if (!initRes.ok) {
+//     const err = await initRes.text();
+//     throw new Error(`Init upload failed: ${err}`);
+//   }
+//   const { uploadUrl } = await initRes.json();
+
+//   // 2) PUT langsung blob ke Google Drive
+//   const putRes = await fetch(uploadUrl, {
+//     method: "PUT",
+//     headers: {
+//       "Content-Type": mimeType,
+//       "Content-Length": blob.size.toString(),
+//     },
+//     body: blob,
+//   });
+//   if (!putRes.ok) {
+//     const err = await putRes.text();
+//     throw new Error(`Drive upload failed: ${err}`);
+//   }
+//   // Response JSON dari Drive berisi metadata termasuk `id`
+//   const metadata = await putRes.json();
+//   const fileId = metadata.id;
+//   if (!fileId) throw new Error("No fileId in Drive upload response");
+
+//   // 3) Konfirmasi dan dapatkan link publik
+//   const confRes = await fetch("/api/confirm-drive-upload", {
+//     method: "POST",
+//     headers: { "Content-Type": "application/json" },
+//     body: JSON.stringify({ fileId }),
+//   });
+//   if (!confRes.ok) {
+//     const err = await confRes.text();
+//     throw new Error(`Confirm upload failed: ${err}`);
+//   }
+//   const { videoUrl } = await confRes.json();
+
+//   console.log(`[Client] Segment ${segmentIndex + 1}: ${videoUrl}`);
+//   return videoUrl;
+// }
+
+async function uploadSegmentThroughProxy(blob, segmentIndex) {
+  // buat filename & File instance
+  const filename = `segment_${segmentIndex + 1}_${Date.now()}.webm`;
+  const file = new File([blob], filename, { type: blob.type });
+
+  // panggil upload SDK client: (name, file, options)
+  const { url: videoUrl } = await upload(
+    filename, // nama blob
+    file, // konten
+    {
+      access: "public", // visibility
+      handleUploadUrl: "/api/blob-handler", // route yang kita buat
+    }
   );
-  try {
-    const filename = `video_segment_${segmentIndex + 1}_${Date.now()}.webm`;
 
-    const formData = new FormData();
-    formData.append("video", blob, filename);
-    formData.append("segmentIndex", segmentIndex.toString());
-    formData.append("mimeType", mimeType);
-
-    for (const [key, value] of formData.entries()) {
-      console.log(`[Client] FormData entry: ${key}:`, value);
-    }
-
-    const response = await fetch("/api/upload-segment", {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(
-        `Failed to upload segment through proxy: ${response.statusText} - ${errorData.error}`
-      );
-    }
-
-    const result = await response.json();
-    console.log(
-      `[Client] Segment ${
-        segmentIndex + 1
-      } uploaded successfully via proxy. URL: ${result.videoUrl}`
-    );
-    return result.videoUrl;
-  } catch (error) {
-    console.error(
-      `[Client] Error uploading segment ${segmentIndex + 1} through proxy:`,
-      error
-    );
-    throw error; // Penting untuk melempar error agar promise bisa di-reject
-  }
+  console.log(`[Client] Segment ${segmentIndex + 1} uploaded:`, videoUrl);
+  return videoUrl;
 }
 
 export default function Home() {
@@ -427,14 +585,14 @@ export default function Home() {
                 const blob = new Blob(chunksRef.current[i], {
                   type: currentMimeType.split(";")[0],
                 });
-
-                // Bungkus logika unggah dalam promise dan simpan di variabel lokal
+                // Panggil fungsi upload yang baru
                 uploadPromise = (async () => {
                   try {
                     const videoUrl = await uploadSegmentThroughProxy(
+                      // Pastikan nama fungsi sesuai
                       blob,
                       i,
-                      currentMimeType
+                      currentMimeType.split(";")[0] // Kirim mimeType tanpa 'codecs' jika perlu
                     );
                     segmentsRef.current[i] = videoUrl;
                     console.log(
@@ -445,7 +603,9 @@ export default function Home() {
                     return { status: "fulfilled", value: videoUrl, index: i };
                   } catch (error) {
                     console.error(
-                      `[Client] Failed to upload segment ${i + 1} via proxy:`,
+                      `[Client] Failed to upload segment ${
+                        i + 1
+                      } to Vercel Blob:`,
                       error
                     );
                     const errorInfo = {
@@ -453,11 +613,7 @@ export default function Home() {
                       error: error.message,
                     };
                     segmentsRef.current[i] = errorInfo;
-                    misuseEventsRef.current.push({
-                      type: "video_upload_proxy_failed",
-                      timestamp: Date.now(),
-                      details: `Segment ${i}: ${error.message}`,
-                    });
+                    // ... (penanganan misuseEventsRef)
                     return { status: "rejected", reason: error, index: i };
                   } finally {
                     delete chunksRef.current[i];
