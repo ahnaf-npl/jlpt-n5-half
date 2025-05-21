@@ -2,7 +2,7 @@ import React from "react";
 
 function IntroScreen({ isAgreed, onAgreeChange, onStartExam, config }) {
   return (
-    <div className="flex flex-col items-center justify-center h-full p-4 modal">
+    <div className="flex flex-col items-center justify-center h-full py-18 px-4 modal">
       <img
         src="/actstudy_logo.png"
         className="w-52 rounded-top mx-auto mb-8"

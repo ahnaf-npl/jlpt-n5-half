@@ -8,7 +8,7 @@ function ResultScreen({
   onRetry, // Handler fungsi untuk mengulang ujian (dipanggil dari tombol)
 }) {
   return (
-    <div className="w-full flex flex-col items-center justify-center min-h-screen p-2 text-white">
+    <div className="w-full flex flex-col items-center justify-center min-h-screen px-2 text-white">
       <img
         src="/actstudy_logo.png"
         className="w-52 rounded-top mx-auto mb-8"
@@ -35,8 +35,8 @@ function ResultScreen({
           }`}
         >
           {finalScore >= 50 // Menggunakan prop finalScore
-            ? "Selamat, Anda Lulus! Terus tingkatkan!"
-            : "Maaf, Anda Belum Lulus. Ayo belajar lagi!"}
+            ? "Selamat, Anda Lulus!  Terus tingkatkan!"
+            : "Anda Belum Lulus. Ayo belajar lagi!"}
         </p>
         <p className="mb-1 text-slate-700">
           Waktu Submit : 
@@ -48,14 +48,12 @@ function ResultScreen({
           {elapsed != null ? formatHMS(Math.floor(elapsed / 1000)) : "N/A"}{" "}
           {/* Menggunakan prop elapsed dan formatHMS */}
         </p>
-        {/* --- Ditambahkan: Tombol Ulangi Ujian (Kondisional) --- */}
-        {/* Tampilkan tombol ini HANYA jika skor kurang dari 60 */}
-        {finalScore < 60 && ( // Menggunakan prop finalScore
+        {finalScore < 50 && ( // Menggunakan prop finalScore
           <button
             onClick={onRetry} // Menggunakan prop onRetry yang disediakan parent
             className="mt-8 px-6 py-3 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors ease-in font-semibold shadow-md"
           >
-            Ulangi Ujian
+            Kerjakan Ulang
           </button>
         )}
       </div>

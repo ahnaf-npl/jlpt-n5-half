@@ -1,45 +1,50 @@
 // pages/api/upload-segment.js
-import { put } from "@vercel/blob";
+import path from "path";
+import { promises as fs } from "fs";
 import { IncomingForm } from "formidable";
-import fs from "fs";
 
 export const config = {
-  api: { bodyParser: false }, // kita akan parse FormData sendiri
+  api: { bodyParser: false },
 };
 
-function parseForm(req) {
-  return new Promise((resolve, reject) => {
-    const form = new IncomingForm();
-    form.parse(req, (err, fields, files) =>
-      err ? reject(err) : resolve({ fields, files })
-    );
-  });
-}
-
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
+  if (req.method !== "POST")
     return res.status(405).json({ error: "Method Not Allowed" });
-  }
-  try {
-    const { files } = await parseForm(req);
-    // 'video' sesuai key FormData.append("video", blob, filename)
-    const file = Array.isArray(files.video) ? files.video[0] : files.video;
-    const path = file.filepath || file.path;
-    const buffer = fs.readFileSync(path);
-    const mimeType = file.mimetype || "application/octet-stream";
-    const filename = file.originalFilename || file.newFilename;
 
-    // langsung upload ke Vercel Blob
-    const blob = await put(filename, buffer, {
-      access: "public",
-      contentType: mimeType,
-      addRandomSuffix: true,
-    });
+  const form = new IncomingForm();
+  form.uploadDir = path.join(process.cwd(), "public", "videos", "tmp"); // temp upload
+  form.keepExtensions = true;
 
-    // blob.url adalah link publik
-    return res.status(200).json({ videoUrl: blob.url });
-  } catch (err) {
-    console.error("Upload-segment API error:", err);
-    return res.status(500).json({ error: err.message });
-  }
+  form.parse(req, async (err, fields, files) => {
+    if (err) return res.status(500).json({ error: err.message });
+
+    const file = files.video;
+    const email = fields.email;
+    if (!file || !email)
+      return res.status(400).json({ error: "Missing file or email" });
+
+    try {
+      const uploadDir = path.join(
+        process.cwd(),
+        "public",
+        "videos",
+        encodeURIComponent(email)
+      );
+      await fs.mkdir(uploadDir, { recursive: true });
+
+      const originalPath = file.filepath || file.file;
+      const filename = file.originalFilename || path.basename(originalPath);
+      const destination = path.join(uploadDir, filename);
+
+      // Pindahkan (copy+unlink untuk cross-device)
+      await fs.copyFile(originalPath, destination);
+      await fs.unlink(originalPath);
+
+      const videoUrl = `/videos/${encodeURIComponent(email)}/${filename}`;
+      return res.status(200).json({ videoUrl });
+    } catch (e) {
+      console.error(e);
+      return res.status(500).json({ error: e.message });
+    }
+  });
 }

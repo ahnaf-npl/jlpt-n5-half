@@ -6,11 +6,6 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_ZAPIER_WEBHOOK_URL: process.env.ZAPIER_WEBHOOK_URL,
   },
-  api: {
-    bodyParser: {
-      sizeLimit: "50mb",
-    },
-  },
 };
 
-export default nextConfig; // Ini akan valid jika nama file adalah .mjs
+export default nextConfig;

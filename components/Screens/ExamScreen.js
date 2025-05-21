@@ -21,7 +21,7 @@ function ExamScreen({
       <div className="flex justify-between mb-4">
         <div>
           <h2 className="text-lg font-bold mb-2">JLPT N5 Tes Singkat</h2>
-          <div className="relative w-52 bg-gray-200 rounded-full h-6 overflow-hidden">
+          <div className="relative w-52 ring-2 ring-blue-500 bg-slate-300 rounded-full h-6 overflow-hidden">
             <div
               className="absolute left-0 top-0 h-full bg-blue-500 rounded-full transition-all duration-500"
               style={{ width: `${progress}%` }}
