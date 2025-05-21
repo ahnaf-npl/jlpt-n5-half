@@ -3,75 +3,69 @@ import { IncomingForm } from "formidable";
 import fs from "fs";
 import path from "path";
 
-// Base folder untuk menaruh video
-const UPLOAD_BASE = path.join(process.cwd(), "public", "videos");
-const TMP_DIR = path.join(UPLOAD_BASE, "tmp");
-
-// Pastikan folder tmp ada
-fs.mkdirSync(TMP_DIR, { recursive: true });
-
 export const config = {
-  api: { bodyParser: false },
+  api: {
+    bodyParser: false, // penting, agar Formidable bisa parse
+  },
 };
 
-export default function handler(req, res) {
-  if (req.method !== "POST")
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
     return res.status(405).json({ error: "Method Not Allowed" });
+  }
 
-  const form = new IncomingForm({
-    uploadDir: TMP_DIR,
-    keepExtensions: true,
-  });
+  try {
+    // Parse form (multipart)
+    const { fields, files } = await new Promise((resolve, reject) => {
+      const form = new IncomingForm({ multiples: false });
+      form.parse(req, (err, fields, files) =>
+        err ? reject(err) : resolve({ fields, files })
+      );
+    });
 
-  form.parse(req, (err, fields, files) => {
-    if (err) {
-      console.error("Form parse error:", err);
-      return res.status(500).json({ error: err.message });
-    }
-
-    // Ambil field email
     const email = fields.email;
     if (!email) {
       return res.status(400).json({ error: "Missing email field" });
     }
 
-    // files bisa array atau object; ambil video upload pertama
-    let fileField = files.video;
-    if (Array.isArray(fileField)) fileField = fileField[0];
-    // fallback jika nama field bukan “video”
-    if (!fileField) {
-      const first = Object.values(files)[0];
-      fileField = Array.isArray(first) ? first[0] : first;
-    }
-    if (!fileField) {
-      return res.status(400).json({ error: "No file uploaded" });
+    // files.video bisa array atau object
+    let file = files.video;
+    if (Array.isArray(file)) file = file[0];
+    if (!file) {
+      return res.status(400).json({ error: "Missing video field" });
     }
 
-    // Dapatkan path sementara
-    const tmpPath = fileField.filepath || fileField.path;
-    if (typeof tmpPath !== "string") {
-      console.error("tmpPath is not a string:", tmpPath);
+    // path ke file temp
+    const tempPath = file.filepath || file.path;
+    if (typeof tempPath !== "string") {
       return res
         .status(500)
-        .json({ error: "Internal: upload temp path not found" });
+        .json({ error: "Invalid temp file path in upload handler" });
     }
 
-    // Buat folder tujuan public/videos/<email>/
-    const destDir = path.join(UPLOAD_BASE, email);
-    fs.mkdirSync(destDir, { recursive: true });
+    // siapkan folder user
+    const userDir = path.join(process.cwd(), "public", "videos", email);
+    fs.mkdirSync(userDir, { recursive: true });
 
-    // Pindahkan file
-    const filename = path.basename(tmpPath);
-    const destPath = path.join(destDir, filename);
+    // nama file: gunakan original name
+    const filename = file.originalFilename || file.newFilename || file.name;
+    const destPath = path.join(userDir, filename);
 
-    fs.rename(tmpPath, destPath, (renameErr) => {
-      if (renameErr) {
-        console.error("fs.rename error:", renameErr);
-        return res.status(500).json({ error: renameErr.message });
-      }
-      // Beri URL relatif yang lengkap
-      const videoUrl = `/videos/${encodeURIComponent(email)}/${filename}`;
-      return res.status(200).json({ videoUrl });
-    });
-  });
+    // pindahkan dari temp ke folder tujuan
+    fs.renameSync(tempPath, destPath);
+
+    // URL relatif + encode email
+    const videoUrl =
+      "/videos/" +
+      encodeURIComponent(email) +
+      "/" +
+      encodeURIComponent(filename);
+
+    return res.status(200).json({ videoUrl });
+  } catch (err) {
+    console.error("API /api/upload-segment error:", err);
+    return res
+      .status(500)
+      .json({ error: err.message || "Failed to upload segment" });
+  }
 }
