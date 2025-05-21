@@ -532,7 +532,7 @@ export default function Home() {
           try {
             const rec = new MediaRecorder(stream, {
               mimeType: getOptimalMimeType(),
-              videoBitsPerSecond: 250000,
+              videoBitsPerSecond: 170000,
             });
 
             const currentMimeType = rec.mimeType;
