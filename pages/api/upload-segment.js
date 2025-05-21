@@ -3,7 +3,6 @@ import formidable from "formidable";
 import fs from "fs";
 import path from "path";
 
-// Matikan built-in bodyParser agar formidable bisa bekerja
 export const config = {
   api: {
     bodyParser: false,
@@ -15,31 +14,34 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const uploadDir = path.join(process.cwd(), "public", "videos", "tmp");
-  // pastikan folder tmp ada
-  await fs.promises.mkdir(uploadDir, { recursive: true });
+  // folder sementara
+  const tmpDir = path.join(process.cwd(), "public", "videos", "tmp");
+  await fs.promises.mkdir(tmpDir, { recursive: true });
 
   const form = new formidable.IncomingForm({
-    uploadDir,
+    uploadDir: tmpDir,
     keepExtensions: true,
-    multiples: false, // <<< penting: satu file saja
-    maxFileSize: 200 * 1024 * 1024, // contoh 200MB
+    multiples: false,
   });
 
   form.parse(req, async (err, fields, files) => {
     if (err) return res.status(500).json({ error: err.message });
 
     const email = fields.email;
-    if (!email) return res.status(400).json({ error: "Missing email field" });
+    if (!email) return res.status(400).json({ error: "Missing email" });
 
-    // formidable v3+ memakai `filepath`
-    const file = files.video;
+    // formidable kadang return array untuk files.video
+    let file = files.video;
+    if (Array.isArray(file)) file = file[0];
+    if (!file) return res.status(400).json({ error: "No file uploaded" });
+
+    // path sementara
     const tempPath = file.filepath || file.path;
     if (Array.isArray(tempPath)) {
       return res.status(500).json({ error: "Unexpected array for file path" });
     }
 
-    // siapkan folder tujuan: public/videos/{email}
+    // folder final per email
     const destDir = path.join(process.cwd(), "public", "videos", email);
     await fs.promises.mkdir(destDir, { recursive: true });
 
@@ -52,7 +54,6 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: e.message });
     }
 
-    // URL yang nanti dipakai di client
     const videoUrl = `/videos/${encodeURIComponent(email)}/${fileName}`;
     return res.status(200).json({ videoUrl });
   });
