@@ -251,24 +251,17 @@ function getOptimalMimeType() {
 // }
 
 async function uploadSegmentThroughProxy(blob, segmentIndex) {
-  // buat filename & File instance
   const filename = `segment_${segmentIndex + 1}_${Date.now()}.webm`;
   const file = new File([blob], filename, { type: blob.type });
 
-  // panggil upload SDK client: (name, file, options)
-  const { url: videoUrl } = await upload(
-    filename, // nama blob
-    file, // konten
-    {
-      access: "public", // visibility
-      handleUploadUrl: "/api/blob-handler", // route yang kita buat
-    }
-  );
+  const { url: videoUrl } = await upload(filename, file, {
+    access: "public",
+    handleUploadUrl: "/api/blob-handler",
+  });
 
-  console.log(`[Client] Segment ${segmentIndex + 1} uploaded:`, videoUrl);
+  console.log(`[Client] Segment ${segmentIndex + 1} uploaded: ${videoUrl}`);
   return videoUrl;
 }
-
 export default function Home() {
   const [step, setStep] = useState("intro");
   const [qs, setQs] = useState([]);
