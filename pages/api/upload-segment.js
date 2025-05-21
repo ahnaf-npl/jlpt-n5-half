@@ -1,90 +1,45 @@
 // pages/api/upload-segment.js
-import { put } from "@vercel/blob"; // Hanya import 'put' dari '@vercel/blob'
+import { put } from "@vercel/blob";
+import { IncomingForm } from "formidable";
+import fs from "fs";
 
 export const config = {
-  api: {
-    // Penting: bodyparser HARUS false agar kita bisa membaca stream secara manual.
-    // Ini juga untuk menghindari batasan 4.5MB Vercel Functions.
-    bodyParser: false,
-  },
+  api: { bodyParser: false }, // kita akan parse FormData sendiri
 };
+
+function parseForm(req) {
+  return new Promise((resolve, reject) => {
+    const form = new IncomingForm();
+    form.parse(req, (err, fields, files) =>
+      err ? reject(err) : resolve({ fields, files })
+    );
+  });
+}
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
-
-  let filename;
-  let mimeType;
-
   try {
-    // --- PERBAIKAN KRUSIAL: Membaca body JSON dari stream ---
-    const chunks = [];
-    // Mendengarkan event 'data' untuk mengumpulkan chunk
-    req.on("data", (chunk) => {
-      chunks.push(chunk);
-    });
+    const { files } = await parseForm(req);
+    // 'video' sesuai key FormData.append("video", blob, filename)
+    const file = Array.isArray(files.video) ? files.video[0] : files.video;
+    const path = file.filepath || file.path;
+    const buffer = fs.readFileSync(path);
+    const mimeType = file.mimetype || "application/octet-stream";
+    const filename = file.originalFilename || file.newFilename;
 
-    // Mendengarkan event 'end' ketika semua data telah diterima
-    await new Promise((resolve, reject) => {
-      req.on("end", () => {
-        try {
-          const bodyBuffer = Buffer.concat(chunks);
-          const body = JSON.parse(bodyBuffer.toString("utf8")); // Pastikan parse sebagai UTF-8
-
-          filename = body.filename;
-          mimeType = body.mimeType;
-          resolve();
-        } catch (parseError) {
-          console.error(
-            "[API upload-segment] Error parsing request body:",
-            parseError
-          );
-          reject(new Error("Invalid JSON body received."));
-        }
-      });
-      req.on("error", reject); // Tangani error stream
-    });
-
-    if (!filename || !mimeType) {
-      return res.status(400).json({
-        error: "Filename and mimeType are required in the request body.",
-      });
-    }
-
-    console.log(
-      `[API upload-segment] Preparing Vercel Blob put for: ${filename} (${mimeType})`
-    );
-
-    // Memanggil `put` dengan Buffer.from('') dan contentType
-    // Ini yang akan menginisialisasi client upload dan memberikan signed URL
-    const blob = await put(filename, Buffer.from(""), {
-      access: "public", // Sesuaikan dengan kebutuhan Anda
+    // langsung upload ke Vercel Blob
+    const blob = await put(filename, buffer, {
+      access: "public",
+      contentType: mimeType,
       addRandomSuffix: true,
-      contentType: mimeType, // Penting untuk menyimpan mimeType yang benar
     });
 
-    console.log(
-      `[API upload-segment] Successfully obtained Vercel Blob URL: ${blob.url}`
-    );
-    return res
-      .status(200)
-      .json({ uploadUrl: blob.url, vercelBlobUrl: blob.url });
-  } catch (error) {
-    console.error(
-      `[API upload-segment] Error during Vercel Blob URL acquisition:`,
-      error
-    );
-    // Log detail error dari respons jika ada
-    if (error.response && error.response.data) {
-      console.error(
-        "Vercel Blob SDK error details:",
-        error.response.status,
-        error.response.data
-      );
-    }
-    return res.status(500).json({
-      error: error.message || "Failed to get Vercel Blob upload URL.",
-    });
+    // blob.url adalah link publik
+    return res.status(200).json({ videoUrl: blob.url });
+  } catch (err) {
+    console.error("Upload-segment API error:", err);
+    return res.status(500).json({ error: err.message });
   }
 }

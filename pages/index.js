@@ -250,18 +250,37 @@ function getOptimalMimeType() {
 //   return videoUrl;
 // }
 
+// async function uploadSegmentThroughProxy(blob, segmentIndex) {
+//   const filename = `segment_${segmentIndex + 1}_${Date.now()}.webm`;
+//   const file = new File([blob], filename, { type: blob.type });
+
+//   const { url: videoUrl } = await upload(filename, file, {
+//     access: "public",
+//     handleUploadUrl: "/api/blob-handler",
+//   });
+
+//   console.log(`[Client] Segment ${segmentIndex + 1} uploaded: ${videoUrl}`);
+//   return videoUrl;
+// }
+
 async function uploadSegmentThroughProxy(blob, segmentIndex) {
-  const filename = `segment_${segmentIndex + 1}_${Date.now()}.webm`;
-  const file = new File([blob], filename, { type: blob.type });
+  const filename = `seg${segmentIndex + 1}_${Date.now()}.webm`;
+  const form = new FormData();
+  form.append("video", blob, filename);
 
-  const { url: videoUrl } = await upload(filename, file, {
-    access: "public",
-    handleUploadUrl: "/api/blob-handler",
+  const res = await fetch("/api/upload-segment", {
+    method: "POST",
+    body: form,
   });
-
-  console.log(`[Client] Segment ${segmentIndex + 1} uploaded: ${videoUrl}`);
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Upload failed: ${err}`);
+  }
+  const { videoUrl } = await res.json();
+  console.log(`[Client] Segment ${segmentIndex + 1} uploaded:`, videoUrl);
   return videoUrl;
 }
+
 export default function Home() {
   const [step, setStep] = useState("intro");
   const [qs, setQs] = useState([]);
