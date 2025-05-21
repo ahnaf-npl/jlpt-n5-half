@@ -1,5 +1,5 @@
 // pages/api/upload-segment.js
-import formidable from "formidable";
+import { IncomingForm } from "formidable";
 import fs from "fs";
 import path from "path";
 
@@ -14,11 +14,11 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  // folder sementara
+  // Pastikan folder sementara ada
   const tmpDir = path.join(process.cwd(), "public", "videos", "tmp");
   await fs.promises.mkdir(tmpDir, { recursive: true });
 
-  const form = new formidable.IncomingForm({
+  const form = new IncomingForm({
     uploadDir: tmpDir,
     keepExtensions: true,
     multiples: false,
@@ -30,18 +30,18 @@ export default async function handler(req, res) {
     const email = fields.email;
     if (!email) return res.status(400).json({ error: "Missing email" });
 
-    // formidable kadang return array untuk files.video
+    // formidable kadang akhirnya memberi array
     let file = files.video;
     if (Array.isArray(file)) file = file[0];
     if (!file) return res.status(400).json({ error: "No file uploaded" });
 
-    // path sementara
+    // Ambil filepath (v3 pakai .filepath)
     const tempPath = file.filepath || file.path;
     if (Array.isArray(tempPath)) {
       return res.status(500).json({ error: "Unexpected array for file path" });
     }
 
-    // folder final per email
+    // Buat folder untuk user
     const destDir = path.join(process.cwd(), "public", "videos", email);
     await fs.promises.mkdir(destDir, { recursive: true });
 
@@ -54,6 +54,7 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: e.message });
     }
 
+    // URL yang lengkap dan bisa diakses via browser:
     const videoUrl = `/videos/${encodeURIComponent(email)}/${fileName}`;
     return res.status(200).json({ videoUrl });
   });
