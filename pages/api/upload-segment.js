@@ -4,9 +4,7 @@ import fs from "fs";
 import path from "path";
 
 export const config = {
-  api: {
-    bodyParser: false, // penting, agar Formidable bisa parse
-  },
+  api: { bodyParser: false },
 };
 
 export default async function handler(req, res) {
@@ -15,7 +13,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Parse form (multipart)
+    // 1) parse multipart
     const { fields, files } = await new Promise((resolve, reject) => {
       const form = new IncomingForm({ multiples: false });
       form.parse(req, (err, fields, files) =>
@@ -23,38 +21,38 @@ export default async function handler(req, res) {
       );
     });
 
+    // 2) ambil email
     const email = fields.email;
     if (!email) {
       return res.status(400).json({ error: "Missing email field" });
     }
 
-    // files.video bisa array atau object
+    // 3) ambil file video
     let file = files.video;
     if (Array.isArray(file)) file = file[0];
     if (!file) {
-      return res.status(400).json({ error: "Missing video field" });
+      return res.status(400).json({ error: "Missing video file field" });
     }
 
-    // path ke file temp
-    const tempPath = file.filepath || file.path;
+    // 4) tentukan tempPath
+    let tempPath = file.filepath || file.path;
+    if (Array.isArray(tempPath)) tempPath = tempPath[0];
     if (typeof tempPath !== "string") {
-      return res
-        .status(500)
-        .json({ error: "Invalid temp file path in upload handler" });
+      return res.status(500).json({ error: "Invalid temp file path" });
     }
 
-    // siapkan folder user
+    // 5) buat direktori user di public/videos/<email>
     const userDir = path.join(process.cwd(), "public", "videos", email);
     fs.mkdirSync(userDir, { recursive: true });
 
-    // nama file: gunakan original name
+    // 6) nama file
     const filename = file.originalFilename || file.newFilename || file.name;
     const destPath = path.join(userDir, filename);
 
-    // pindahkan dari temp ke folder tujuan
+    // 7) pindahkan
     fs.renameSync(tempPath, destPath);
 
-    // URL relatif + encode email
+    // 8) kembalikan URL (relatif ke public)
     const videoUrl =
       "/videos/" +
       encodeURIComponent(email) +
