@@ -12,41 +12,51 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  // Pastikan folder tmp ada
   const tmpDir = path.join(process.cwd(), "public", "videos", "tmp");
   await fs.promises.mkdir(tmpDir, { recursive: true });
 
-  // Formidable v3 usage
   const form = formidable({
     uploadDir: tmpDir,
     keepExtensions: true,
     multiples: false,
   });
 
-  form.parse(req, async (err, fields, files) => {
-    if (err) return res.status(500).json({ error: err.message });
+  try {
+    await new Promise((resolve, reject) => {
+      form.parse(req, async (err, fields, files) => {
+        if (err) return reject(err);
 
-    const email = fields.email;
-    if (!email) return res.status(400).json({ error: "Missing email" });
+        // pure JS: no "as string"
+        const email = fields.email;
+        if (!email) {
+          res.status(400).json({ error: "Missing email" });
+          return reject(new Error("Missing email"));
+        }
 
-    let file = Array.isArray(files.video) ? files.video[0] : files.video;
-    if (!file) return res.status(400).json({ error: "No file uploaded" });
+        let file = Array.isArray(files.video) ? files.video[0] : files.video;
+        if (!file) {
+          res.status(400).json({ error: "No file uploaded" });
+          return reject(new Error("No file uploaded"));
+        }
 
-    const tempPath = file.filepath || file.path;
-    const destDir = path.join(process.cwd(), "public", "videos", email);
-    await fs.promises.mkdir(destDir, { recursive: true });
+        // pure JS: no "as any"
+        const tempPath = file.filepath || file.path;
+        const destDir = path.join(process.cwd(), "public", "videos", email);
+        await fs.promises.mkdir(destDir, { recursive: true });
 
-    const fileName = path.basename(tempPath);
-    const destPath = path.join(destDir, fileName);
+        const fileName = path.basename(tempPath);
+        const destPath = path.join(destDir, fileName);
+        await fs.promises.rename(tempPath, destPath);
 
-    try {
-      await fs.promises.rename(tempPath, destPath);
-    } catch (e) {
-      return res.status(500).json({ error: e.message });
+        const videoUrl = `/videos/${encodeURIComponent(email)}/${fileName}`;
+        res.status(200).json({ videoUrl });
+        resolve();
+      });
+    });
+  } catch (e) {
+    console.error("upload-segment error:", e);
+    if (!res.headersSent) {
+      res.status(500).json({ error: e.message || "Internal Server Error" });
     }
-
-    // Gunakan backticks di sini!
-    const videoUrl = `/videos/${encodeURIComponent(email)}/${fileName}`;
-    return res.status(200).json({ videoUrl });
-  });
+  }
 }
