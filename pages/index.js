@@ -212,35 +212,35 @@ export default function Home() {
   }
 
   // Fungsi upload per segmen, pakai email dari params
-  const uploadSegmentThroughProxy = useCallback(async (blob, segmentIndex) => {
-    let email = params.email;
-    // Fallback: baca langsung dari URL jika belum ter-set
-    if (!email) {
-      const p = new URLSearchParams(window.location.search);
-      email = p.get("email") || "";
-    }
-    if (!email) {
-      throw new Error("Missing user email");
-    }
+  const uploadSegmentThroughProxy = useCallback(
+    async (blob, segmentIndex) => {
+      let id = params.id;
+      if (!id) {
+        const p = new URLSearchParams(window.location.search);
+        id = p.get("id") || "";
+      }
+      if (!id) {
+        throw new Error("Missing user id");
+      }
 
-    const filename = `segment_${segmentIndex + 1}_${Date.now()}.webm`;
-    const form = new FormData();
-    form.append("video", blob, filename);
-    form.append("id", params.id);
+      const filename = `segment_${segmentIndex + 1}_${Date.now()}.webm`;
+      const form = new FormData();
+      form.append("video", blob, filename);
+      form.append("id", id);
 
-    const res = await fetch("/api/upload-segment", {
-      method: "POST",
-      body: form,
-    });
-    if (!res.ok) {
-      const errorText = await res.text();
-      throw new Error(`Upload failed: ${errorText}`);
-    }
-
-    const { videoUrl } = await res.json(); // "/videos/…"
-    const fullUrl = `${window.location.origin}${videoUrl}`;
-    return fullUrl; // "https://your-domain.com/videos/…"
-  }, []);
+      const res = await fetch("/api/upload-segment", {
+        method: "POST",
+        body: form,
+      });
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`Upload failed: ${errorText}`);
+      }
+      const { videoUrl } = await res.json();
+      return videoUrl;
+    },
+    [params.id]
+  );
 
   // Fungsi untuk menyeleksi dan mengacak pertanyaan serta opsi jawabannya
   function generateQuestions() {
