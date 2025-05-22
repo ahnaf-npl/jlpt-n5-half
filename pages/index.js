@@ -233,11 +233,15 @@ export default function Home() {
         body: form,
       });
       if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`Upload failed: ${errorText}`);
+        const err = await res.text();
+        throw new Error(`Upload failed: ${err}`);
       }
-      const { videoUrl } = await res.json();
-      return videoUrl;
+      const { videoUrl } = await res.json(); // e.g. "/videos/12345678/xyz.webm"
+
+      // dapatkan origin (https://jlpt-n5-half.actstudy.biz)
+      const origin = window.location.origin;
+      const fullUrl = `${origin}${videoUrl}`;
+      return fullUrl; // e.g. "https://jlpt-n5-half.actstudy.biz/videos/12345678/xyz.webm"
     },
     [params.id]
   );
