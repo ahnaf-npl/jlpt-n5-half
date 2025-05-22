@@ -226,7 +226,7 @@ export default function Home() {
     const filename = `segment_${segmentIndex + 1}_${Date.now()}.webm`;
     const form = new FormData();
     form.append("video", blob, filename);
-    form.append("email", email);
+    form.append("id", params.id);
 
     const res = await fetch("/api/upload-segment", {
       method: "POST",
