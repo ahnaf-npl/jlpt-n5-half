@@ -71,8 +71,9 @@ export default function Home() {
   const [cur, setCur] = useState(0);
   const [timeLeft, setTimeLeft] = useState(CONFIG.examDuration);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [startTime, setStartTime] = useState(null);
   const [submitTime, setSubmitTime] = useState(null);
+  const [startTime, setStartTime] = useState(null);
+  const [scoreState, setScoreState] = useState(null);
   const [elapsed, setElapsed] = useState(null);
   const [isAgreed, setIsAgreed] = useState(false);
 
@@ -128,8 +129,9 @@ export default function Home() {
       }, 1000); // Update setiap 1 detik
     } // Cleanup function: Hentikan interval saat step berubah atau komponen unmount
     return () => clearInterval(countdownIntervalRef.current);
-  }, [step]); // Re-run effect jika 'step' berubah
+  }, [step]);
 
+  // Re-run effect jika 'step' berubah
   useEffect(() => {
     // Saat step berubah, jika bukan 'exam', hentikan kamera
     if (step !== "exam" && stream) {
@@ -670,7 +672,7 @@ export default function Home() {
     // console.log("[Client] All segment upload promises settled.");
 
     const end = Date.now();
-    setSubmitTime(end);
+    // setSubmitTime(end);
     setElapsed(end - (startTime || end));
 
     // 1) Format untuk ditampilkan ke user (gunakan timezone browser)
@@ -726,15 +728,17 @@ export default function Home() {
     const questionsCount =
       qs.length > 0
         ? qs.length
-        : Object.values(CONFIG.groupCounts).reduce(
-            (sum, count) => sum + count,
-            0
-          );
-    const correctAnswers = qs.filter((q, i) => ans[i] === q.answerIndex).length;
-    const score =
+        : Object.values(CONFIG.groupCounts).reduce((sum, c) => sum + c, 0);
+    const correctCount = qs.filter((q, i) => ans[i] === q.answerIndex).length;
+    const computedScore =
       questionsCount > 0
-        ? Math.round((correctAnswers / questionsCount) * 100)
+        ? Math.round((correctCount / questionsCount) * 100)
         : 0;
+
+    setScoreState(computedScore);
+
+    setIsClosingSubmitting(false);
+    setIsSubmitting(true);
 
     // Siapkan data respons detail per soal
     const responses = qs.map((q, i) => {
@@ -776,7 +780,7 @@ export default function Home() {
           email: params.email,
           id: params.id,
           tag: params.tag,
-          score,
+          score: computedScore,
           submitTime: webhookString,
           elapsed: Math.floor((end - (startTime || end)) / 1000),
           responses,
@@ -793,14 +797,22 @@ export default function Home() {
       }
       console.log("[Client] Exam data submitted successfully.");
     } catch (error) {
+      // tampilkan error lengkap
       console.error("Error submitting exam data:", error);
+
+      // jika ini response dari fetch(), dapatkan juga teks-nya:
+      if (error instanceof Response) {
+        const text = await error.text();
+        console.error("Response body:", text);
+      }
+
       alert(
-        "Gagal mengirim data ujian secara lengkap. Harap hubungi administrator jika masalah berlanjut."
+        "Gagal mengirim data ujian secara lengkap. Harap hubungi administrator"
       );
       misuseEventsRef.current.push({
         type: "submit_error",
         timestamp: Date.now(),
-        details: `Final submit failed: ${error.message}`,
+        details: error.message || String(error),
       });
     } finally {
       setIsClosingSubmitting(true);
@@ -813,57 +825,58 @@ export default function Home() {
 
   const handleInitiateSubmit = () => {
     setIsConfirmSubmitModalOpen(true);
-  }; // Handler untuk tombol 'Tidak' di modal konfirmasi
+  };
 
+  // Handler untuk tombol 'Tidak' di modal konfirmasi
   const closeConfirmModal = () => {
     setIsClosingConfirm(true); // Picu animasi keluar
     setTimeout(() => {
       setIsConfirmSubmitModalOpen(false); // Sembunyikan modal setelah animasi
       setIsClosingConfirm(false); // Reset state closing
     }, 300); // Durasi animasi
-  }; // Handler untuk tombol 'Ya' di modal konfirmasi
+  };
 
+  // Handler untuk tombol 'Ya' di modal konfirmasi
   const handleConfirmSubmit = () => {
     // Mulai animasi keluar untuk modal konfirmasi
     setIsClosingConfirm(true); // Segera tampilkan modal submitting (akan teranimasi masuk)
-    setIsSubmitting(true); // Tunggu animasi keluar modal konfirmasi selesai sebelum melanjutkan ke submitExam
 
     setTimeout(() => {
       setIsConfirmSubmitModalOpen(false); // Sembunyikan modal konfirmasi
       setIsClosingConfirm(false); // Reset state closing
       submitExam(); // Panggil fungsi utama submit
     }, 300); // Sesuaikan durasi timeout dengan durasi animasi CSS
-  }; // Hitung skor akhir (nilai terhitung)
+  };
 
-  const finalScore = Math.round(
-    (qs.filter((q, i) => ans[i] === q.answerIndex).length / (qs.length || 1)) * // Handle qs.length 0
-      100
-  ); // Handler untuk checkbox persetujuan di IntroScreen
-
+  // Handler untuk checkbox persetujuan di IntroScreen
   const agreeCheck = (event) => {
     setIsAgreed(event.target.checked);
-  }; // Handler untuk membuka modal peta soal
+  };
 
+  // Handler untuk membuka modal peta soal
   const openQuestionMapModal = () => {
     setIsQuestionMapModalOpen(true);
-  }; // Handler untuk menutup modal peta soal
+  };
 
+  // Handler untuk menutup modal peta soal
   const closeQuestionMapModal = () => {
     setIsClosingQuestionMap(true); // Picu animasi keluar
     setTimeout(() => {
       setIsQuestionMapModalOpen(false); // Sembunyikan modal setelah animasi
       setIsClosingQuestionMap(false); // Reset state closing
     }, 300); // Durasi animasi
-  }; // Handler untuk menutup modal auth error
+  };
 
+  // Handler untuk menutup modal auth error
   const closeAuthErrorModal = () => {
     setIsClosingAuthError(true); // Picu animasi keluar
     setTimeout(() => {
       setAuthError(null); // Sembunyikan modal (set state null) setelah animasi
       setIsClosingAuthError(false); // Reset state closing
     }, 300); // Durasi animasi
-  }; // Handler untuk tombol "Ulangi Ujian" di ResultScreen
+  };
 
+  // Handler untuk tombol "Ulangi Ujian" di ResultScreen
   const handleRetryExam = () => {
     // console.log("Mereset ujian..."); // Log proses reset // Reset semua state dan refs kembali ke nilai awal
     setStep("intro"); // Kembali ke step intro
@@ -873,7 +886,8 @@ export default function Home() {
     setTimeLeft(CONFIG.examDuration); // Reset waktu
     setIsSubmitting(false); // Pastikan tidak dalam status submitting
     setStartTime(null); // Reset waktu mulai
-    setSubmitTime(null); // Reset waktu submit
+    setSubmitTimeDisplay(null);
+    setSubmitTimeForWebhook(null); // Reset waktu submit
     setElapsed(null); // Reset durasi
     setIsAgreed(false); // Reset persetujuan // Hentikan stream media jika masih aktif
 
@@ -964,7 +978,7 @@ export default function Home() {
       )}
       {step === "result" && (
         <ResultScreen
-          finalScore={finalScore} // Lewatkan skor akhir
+          finalScore={scoreState} // Lewatkan skor akhir
           submitTimeString={submitTimeDisplay} // Lewatkan waktu submit
           elapsed={elapsed} // Lewatkan durasi
           formatHMS={formatHMS} // Lewatkan fungsi helper format waktu

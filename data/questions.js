@@ -13395,7 +13395,7 @@ const QUESTION_GROUPS = {
       answerIndex: 0,
     },
     {
-      desc: "Kanji yang tepat untuk しゃ pada じどうしゃ (自動車) は?",
+      desc: "Kanji yang tepat untuk しゃ pada じどうしゃ?",
       q: [
         {
           base: "じどうしゃの",
