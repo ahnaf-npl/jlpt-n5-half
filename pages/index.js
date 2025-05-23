@@ -747,6 +747,7 @@ export default function Home() {
         body: JSON.stringify({
           email: params.email,
           id: params.id,
+          tag: params.tag,
           score,
           submitTime: new Date(end).toLocaleString(),
           elapsed: Math.floor((end - (startTime || end)) / 1000),
