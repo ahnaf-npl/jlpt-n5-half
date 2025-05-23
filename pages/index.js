@@ -102,7 +102,11 @@ export default function Home() {
 
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
-    setParams({ email: p.get("email") || "", id: p.get("id") || "" });
+    setParams({
+      email: p.get("email") || "",
+      id: p.get("id") || "",
+      status: p.get("status") || "",
+    });
   }, []);
 
   // Effect untuk mengelola timer ujian

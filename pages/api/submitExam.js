@@ -3,8 +3,17 @@ import { google } from "googleapis";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
-  const { email, id, score, submitTime, elapsed, responses, flags, videoUrls } =
-    req.body;
+  const {
+    email,
+    id,
+    status,
+    score,
+    submitTime,
+    elapsed,
+    responses,
+    flags,
+    videoUrls,
+  } = req.body;
   try {
     // send to Zapier webhook
     await fetch(process.env.ZAPIER_WEBHOOK_URL, {
@@ -13,6 +22,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         email,
         id,
+        status,
         score,
         submitTime,
         elapsed,
