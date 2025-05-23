@@ -6,7 +6,7 @@ export default async function handler(req, res) {
   const {
     email,
     id,
-    status,
+    tag,
     score,
     submitTime,
     elapsed,
@@ -22,7 +22,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         email,
         id,
-        status,
+        tag,
         score,
         submitTime,
         elapsed,
