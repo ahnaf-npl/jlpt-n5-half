@@ -71,7 +71,6 @@ export default function Home() {
   const [cur, setCur] = useState(0);
   const [timeLeft, setTimeLeft] = useState(CONFIG.examDuration);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitTime, setSubmitTime] = useState(null);
   const [startTime, setStartTime] = useState(null);
   const [scoreState, setScoreState] = useState(null);
   const [elapsed, setElapsed] = useState(null);
@@ -112,23 +111,43 @@ export default function Home() {
     });
   }, []);
 
+  function startSubmitFlow() {
+    // 1) pastikan modals konfirmasi ditutup
+    setIsConfirmSubmitModalOpen(false);
+    setIsClosingConfirm(false);
+
+    // 2) buka modal submitting
+    setIsClosingSubmitting(false);
+    setIsSubmitting(true);
+
+    // 3) jalankan proses submit yang sudah ada
+    submitExamRef.current();
+  }
+
   // Effect untuk mengelola timer ujian
+  const submitExamRef = useRef();
   useEffect(() => {
-    clearInterval(countdownIntervalRef.current); // Bersihkan interval sebelumnya
-    if (step === "exam") {
-      setTimeLeft(CONFIG.examDuration); // Set waktu awal saat masuk step exam
-      countdownIntervalRef.current = setInterval(() => {
-        setTimeLeft((t) => {
-          if (t <= 1) {
-            clearInterval(countdownIntervalRef.current); // Hentikan timer
-            submitExam(); // Submit otomatis saat waktu habis
-            return 0;
-          }
-          return t - 1; // Kurangi waktu
-        });
-      }, 1000); // Update setiap 1 detik
-    } // Cleanup function: Hentikan interval saat step berubah atau komponen unmount
-    return () => clearInterval(countdownIntervalRef.current);
+    submitExamRef.current = submitExam;
+  }, [submitExam]);
+
+  useEffect(() => {
+    if (step !== "exam") return;
+    setTimeLeft(CONFIG.examDuration);
+
+    const tid = setInterval(() => {
+      setTimeLeft((t) => {
+        if (t <= 1) {
+          clearInterval(tid);
+          // langsung panggil versi terbaru:
+          // submitExamRef.current();
+          startSubmitFlow();
+          return 0;
+        }
+        return t - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(tid);
   }, [step]);
 
   // Re-run effect jika 'step' berubah
@@ -844,7 +863,7 @@ export default function Home() {
     setTimeout(() => {
       setIsConfirmSubmitModalOpen(false); // Sembunyikan modal konfirmasi
       setIsClosingConfirm(false); // Reset state closing
-      submitExam(); // Panggil fungsi utama submit
+      startSubmitFlow();
     }, 300); // Sesuaikan durasi timeout dengan durasi animasi CSS
   };
 

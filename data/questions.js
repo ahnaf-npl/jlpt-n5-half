@@ -5747,7 +5747,7 @@ const QUESTION_GROUPS = {
       answerIndex: 0,
     },
     {
-      desc: "Kanji yang tepat untuk 話 adalah?",
+      desc: "Kanji yang tepat untuk わ pada kata おせわ adalah?",
       q: [
         {
           base: "これから",
@@ -6755,7 +6755,7 @@ const QUESTION_GROUPS = {
       answerIndex: 0,
     },
     {
-      desc: "Kanji yang tepat untuk ここのか (tanggal 9) adalah?",
+      desc: "Kanji yang tepat untuk ここのか adalah?",
       q: [
         {
           base: "たんじょうびは",
@@ -6799,7 +6799,7 @@ const QUESTION_GROUPS = {
       answerIndex: 0,
     },
     {
-      desc: "Kanji yang tepat untuk ふつか (tanggal 2) adalah?",
+      desc: "Kanji yang tepat untuk ふつか adalah?",
       q: [
         {
           base: "この",
@@ -7235,7 +7235,7 @@ const QUESTION_GROUPS = {
       answerIndex: 0,
     },
     {
-      desc: "Bagaimana cara baca kanji 日 pada 十日 (tanggal 10) di kalimat ini?",
+      desc: "Bagaimana cara baca kanji 日 pada 十日 di kalimat ini?",
       q: [
         {
           base: "十",
@@ -12591,7 +12591,7 @@ const QUESTION_GROUPS = {
       answerIndex: 0,
     },
     {
-      desc: "Kanji yang tepat untuk ぜん pada 午ぜん中 (午前中) は?",
+      desc: "Kanji yang tepat untuk ぜん pada 午ぜん中 は?",
       q: [
         {
           base: "午ぜん中",
