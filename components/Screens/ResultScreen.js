@@ -2,7 +2,7 @@ import React from "react";
 
 function ResultScreen({
   finalScore, // Digunakan untuk menampilkan skor dan logika lulus/tidak lulus
-  submitTime, // Digunakan untuk menampilkan waktu submit
+  submitTimeString, // Digunakan untuk menampilkan waktu submit
   elapsed, // Digunakan untuk menampilkan durasi pengerjaan
   formatHMS, // Fungsi helper untuk format waktu (digunakan untuk durasi)
   onRetry, // Handler fungsi untuk mengulang ujian (dipanggil dari tombol)
@@ -39,13 +39,12 @@ function ResultScreen({
             : "Anda Belum Lulus. Ayo belajar lagi!"}
         </p>
         <p className="mb-1 text-slate-700">
-          Waktu Submit : 
-          {submitTime ? new Date(submitTime).toLocaleDateString() : "N/A"}{" "}
+          Waktu Submit : {submitTimeString || "N/A"}
           {/* Menggunakan prop submitTime */}
         </p>
         <p className="text-slate-700">
           Durasi Pengerjaan : 
-          {elapsed != null ? formatHMS(Math.floor(elapsed / 1000)) : "N/A"}{" "}
+          {elapsed != null ? formatHMS(Math.floor(elapsed / 1000)) : "N/A"}
           {/* Menggunakan prop elapsed dan formatHMS */}
         </p>
         {finalScore < 50 && ( // Menggunakan prop finalScore

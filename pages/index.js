@@ -86,6 +86,8 @@ export default function Home() {
   const misuseEventsRef = useRef([]); // Ref untuk mencatat event yang mencurigakan/error
   const [stream, setStream] = useState(null); // State untuk stream media (kamera & mic)
   const [params, setParams] = useState({ email: "", id: "" }); // State untuk parameter URL (autentikasi)
+  const [submitTimeDisplay, setSubmitTimeDisplay] = useState("");
+  const [submitTimeForWebhook, setSubmitTimeForWebhook] = useState("");
 
   const totalTime = useRef(CONFIG.examDuration); // Simpan durasi total di ref untuk perhitungan progress
   const progress = (timeLeft / totalTime.current) * 100; // Hitung progress bar
@@ -671,6 +673,32 @@ export default function Home() {
     setSubmitTime(end);
     setElapsed(end - (startTime || end));
 
+    // 1) Format untuk ditampilkan ke user (gunakan timezone browser)
+    const displayString = new Intl.DateTimeFormat("sv-SE", {
+      // tidak menyebut timeZone → pakai timezone browser user
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    }).format(new Date(end));
+    setSubmitTimeDisplay(displayString);
+
+    // 2) Format untuk webhook (paksa WITA)
+    const webhookString = new Intl.DateTimeFormat("sv-SE", {
+      timeZone: "Asia/Makassar", // WITA
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    }).format(new Date(end));
+    setSubmitTimeForWebhook(webhookString);
+
     const videoUrls = segmentsRef.current
       .map((item) => {
         // Jika string (URL relatif atau absolut), kembalikan langsung
@@ -749,7 +777,7 @@ export default function Home() {
           id: params.id,
           tag: params.tag,
           score,
-          submitTime: new Date(end).toLocaleString(),
+          submitTime: webhookString,
           elapsed: Math.floor((end - (startTime || end)) / 1000),
           responses,
           flags: misuseEventsRef.current,
@@ -937,7 +965,7 @@ export default function Home() {
       {step === "result" && (
         <ResultScreen
           finalScore={finalScore} // Lewatkan skor akhir
-          submitTime={submitTime} // Lewatkan waktu submit
+          submitTimeString={submitTimeDisplay} // Lewatkan waktu submit
           elapsed={elapsed} // Lewatkan durasi
           formatHMS={formatHMS} // Lewatkan fungsi helper format waktu
           onRetry={handleRetryExam} // Lewatkan handler retry
