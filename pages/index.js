@@ -165,6 +165,68 @@ export default function Home() {
     }
   }, [stream]); // Re-run effect jika 'stream' berubah
 
+  // >>> Salin dan tempel kode ini ke dalam komponen Home() Anda <<<
+
+  // Effect untuk mendeteksi upaya terjemahan dan mencatatnya sebagai flag
+  useEffect(() => {
+    // Hanya jalankan observer saat ujian sedang berlangsung
+    if (step !== "exam") return;
+
+    // Fungsi yang akan dipanggil setiap kali ada perubahan pada DOM
+    const handleMutation = (mutationsList) => {
+      // Loop melalui setiap mutasi yang terdeteksi
+      for (const mutation of mutationsList) {
+        // Cek apakah mutasi adalah perubahan atribut 'class' pada tag <html>
+        if (
+          mutation.type === "attributes" &&
+          mutation.attributeName === "class"
+        ) {
+          const htmlElement = document.documentElement;
+
+          // Jika class 'translated' terdeteksi oleh browser
+          if (htmlElement.className.includes("translated")) {
+            // Cek agar tidak mencatat flag yang sama berulang kali
+            const isAlreadyFlagged = misuseEventsRef.current.some(
+              (e) => e.type === "translation_attempt"
+            );
+
+            // Jika belum pernah dicatat, buat dan tambahkan flag baru
+            if (!isAlreadyFlagged) {
+              const timestamp = Date.now();
+              const elapsedSec = startTime
+                ? Math.floor((timestamp - startTime) / 1000)
+                : 0;
+              const relativeHMS = formatHMS(elapsedSec);
+
+              console.warn("FLAGGED: User attempted to translate the page.");
+
+              // Masukkan catatan flag ke dalam misuseEventsRef
+              misuseEventsRef.current.push({
+                type: "translation_attempt",
+                timestamp: timestamp,
+                details: `⁉️ [${relativeHMS}] 警告！ ページの翻訳が検出されました。`,
+              });
+            }
+          }
+        }
+      }
+    };
+
+    // Buat instance MutationObserver dengan fungsi callback di atas
+    const observer = new MutationObserver(handleMutation);
+
+    // Mulai amati tag <html> untuk perubahan pada atribut 'class'
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+
+    // Fungsi cleanup: hentikan observer saat ujian selesai atau komponen unmount
+    return () => {
+      observer.disconnect();
+    };
+  }, [step, startTime, formatHMS]); // Dependencies effect ini
+
   // Handler untuk merekam tab-hidden event saja
   const handleVisibilityChange = useCallback(() => {
     if (step !== "exam") return; // hanya saat exam
@@ -181,7 +243,7 @@ export default function Home() {
     misuseEventsRef.current.push({
       type: "tab_hidden",
       timestamp,
-      details: `[${relativeHMS}]　注意！　ユーザーはタブ/アプリを移動しました。`,
+      details: `⚠️ [${relativeHMS}]　警告！　タブ・アプリの移動が検出されました。`,
     });
   }, [step, startTime, formatHMS]);
 
