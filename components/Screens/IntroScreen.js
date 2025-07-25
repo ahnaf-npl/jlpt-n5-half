@@ -24,6 +24,11 @@ function IntroScreen({ isAgreed, onAgreeChange, onStartExam, config }) {
         </p>
         <ul className="text-sm mb-6 text-justify">
           <li>
+            🔹Gunakan browser
+            <strong className="text-blue-500"> "Google Chrome"</strong> saat
+            mengerjakan tes ini.
+          </li>
+          <li>
             🔹Pastikan perangkat dan lingkungan Anda siap untuk melaksanakan tes
             selama 30 menit.
           </li>
@@ -69,7 +74,7 @@ function IntroScreen({ isAgreed, onAgreeChange, onStartExam, config }) {
 
         <button
           onClick={onStartExam}
-          className={`w-full py-2 bg-blue-600 text-white rounded hover:bg-blue-800 transition-all ease-in ${
+          className={`w-full py-2 font-bold bg-blue-600 text-white rounded hover:bg-blue-800 transition-all ease-in ${
             !isAgreed ? "opacity-50 cursor-not-allowed" : ""
           }`}
           disabled={!isAgreed}

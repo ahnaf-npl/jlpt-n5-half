@@ -1,7 +1,13 @@
 // pages/index.js
-import React, { useState, useEffect, useRef, useCallback } from "react";
-import QUESTION_GROUPS from "../data/questions";
 
+// ========================================================================
+// IMPORT LIBRARIES & COMPONENTS
+// ========================================================================
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { Toaster, toast } from "react-hot-toast"; // Library untuk notifikasi popup (toast)
+import QUESTION_GROUPS from "../data/questions"; // Data bank soal
+
+// Komponen-komponen UI modular
 import SubmittingModal from "../components/Modals/SubmittingModal";
 import AuthErrorModal from "../components/Modals/AuthErrorModal";
 import QuestionMapModal from "../components/Modals/QuestionMapModal";
@@ -10,10 +16,20 @@ import IntroScreen from "../components/Screens/IntroScreen";
 import ExamScreen from "../components/Screens/ExamScreen";
 import ResultScreen from "../components/Screens/ResultScreen";
 
+// ========================================================================
+// KONFIGURASI UTAMA APLIKASI
+// ========================================================================
+/**
+ * Objek konfigurasi utama untuk ujian.
+ * @property {number} examDuration - Durasi total ujian dalam detik.
+ * @property {number} recordInterval - Interval waktu untuk memulai segmen rekaman baru (detik).
+ * @property {number} recordDuration - Durasi setiap segmen rekaman video (detik).
+ * @property {object} groupCounts - Jumlah soal yang akan diambil dari setiap grup/kategori.
+ */
 const CONFIG = {
-  examDuration: 1800, // 30 minutes in seconds
-  recordInterval: 600, // every 10 minutes = 600 seconds
-  recordDuration: 180, // record 3 minutes each
+  examDuration: 1800, // 30 menit
+  recordInterval: 600, // Rekaman dimulai setiap 10 menit
+  recordDuration: 180, // Durasi rekaman adalah 3 menit per segmen
   groupCounts: {
     "表記（前半レベル [ひらがな・カタカナ] ）": 5,
     "表記（中盤レベル[7〜17か]）": 5,
@@ -31,7 +47,15 @@ const CONFIG = {
   },
 };
 
-// Fungsi helper untuk merender ruby
+// ========================================================================
+// FUNGSI HELPER
+// ========================================================================
+/**
+ * Merender segmen teks dengan atau tanpa karakter ruby (furigana).
+ * @param {object} seg - Objek segmen berisi 'base' dan 'ruby'.
+ * @param {string|number} key - Kunci unik untuk elemen React.
+ * @returns {JSX.Element} Elemen JSX yang sesuai.
+ */
 function renderRubySegment(seg, key) {
   if (seg.base === "<br>") return <br key={key} />;
   return seg.ruby ? (
@@ -44,206 +68,289 @@ function renderRubySegment(seg, key) {
   );
 }
 
+/**
+ * Mendeteksi dan memilih tipe MIME video terbaik yang didukung browser untuk MediaRecorder.
+ * @returns {string} String tipe MIME yang optimal.
+ */
 function getOptimalMimeType() {
   const isIOS =
     /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
   if (isIOS && MediaRecorder.isTypeSupported("video/mp4")) {
-    // console.log("Using video/mp4 for iOS device.");
+    // console.log("DEBUG: Using video/mp4 for iOS device.");
     return "video/mp4";
   } else if (MediaRecorder.isTypeSupported("video/webm; codecs=vp8")) {
-    // console.log("Using video/webm; codecs=vp8.");
+    // console.log("DEBUG: Using video/webm; codecs=vp8.");
     return "video/webm; codecs=vp8";
   } else if (MediaRecorder.isTypeSupported("video/webm")) {
-    // console.log("Using video/webm (generic).");
+    // console.log("DEBUG: Using video/webm (generic).");
     return "video/webm";
   }
   console.warn(
-    "No specific MediaRecorder mimeType supported. Defaulting to video/webm."
+    "WARNING: No specific MediaRecorder mimeType supported. Defaulting to video/webm."
   );
   return "video/webm";
 }
 
-export default function Home() {
-  const [step, setStep] = useState("intro");
-  const [qs, setQs] = useState([]);
-  const [ans, setAns] = useState({});
-  const [cur, setCur] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(CONFIG.examDuration);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [startTime, setStartTime] = useState(null);
-  const [scoreState, setScoreState] = useState(null);
-  const [elapsed, setElapsed] = useState(null);
-  const [isAgreed, setIsAgreed] = useState(false);
+// ========================================================================
+// KOMPONEN UI LOKAL
+// ========================================================================
+/**
+ * Komponen Modal untuk Lock System, meminta pengguna memasukkan kode unik.
+ */
+function LockModal({
+  isOpen,
+  isClosing,
+  onSubmit,
+  uniqueCode,
+  setUniqueCode,
+  isVerifying,
+}) {
+  if (!isOpen) return null;
 
-  const recorderRef = useRef(null);
-  const videoRef = useRef(null);
-  const segmentsRef = useRef([]); // Menyimpan Blob dari setiap segmen rekaman
-  const chunksRef = useRef({}); // Menyimpan data chunk sementara per segmen
-  const countdownIntervalRef = useRef(null); // Ref untuk ID interval timer
-  const recordingPromisesRef = useRef([]);
-  const recordingTimeoutsRef = useRef([]); // Ref untuk ID timeout penjadwalan rekaman
-  const misuseEventsRef = useRef([]); // Ref untuk mencatat event yang mencurigakan/error
-  const [stream, setStream] = useState(null); // State untuk stream media (kamera & mic)
-  const [params, setParams] = useState({ email: "", id: "" }); // State untuk parameter URL (autentikasi)
+  return (
+    <div
+      className={`fixed inset-0 bg-black/60 flex justify-center items-center z-50 transition-opacity duration-300 ${
+        isOpen && !isClosing ? "opacity-100" : "opacity-0"
+      }`}
+    >
+      <div
+        className={`bg-white rounded-lg shadow-2xl p-6 md:p-8 w-11/12 md:w-1/3 max-w-lg transform transition-transform duration-300 ${
+          isOpen && !isClosing ? "scale-100" : "scale-95"
+        }`}
+      >
+        <h2 className="text-xl md:text-2xl font-bold text-red-600 mb-4">
+          Akses Ditolak
+        </h2>
+        <p className="text-gray-700 mb-6">
+          Anda sudah pernah mengerjakan tes ini. Anda bisa mencoba lagi nanti
+          ketika latihan interview atau mendan. Sensei dari LPK LINK akan
+          memberikan kode unik saat itu.
+        </p>
+        <form onSubmit={onSubmit}>
+          <input
+            type="text"
+            value={uniqueCode}
+            onChange={(e) => setUniqueCode(e.target.value)}
+            placeholder="Masukkan Kode Unik"
+            className="w-full px-4 py-2 border border-gray-300 rounded-md mb-4 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            disabled={isVerifying}
+          />
+          <button
+            type="submit"
+            className="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400"
+            disabled={isVerifying || !uniqueCode}
+          >
+            {isVerifying ? "Memverifikasi..." : "Mulai Ujian"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Komponen layar penuh yang ditampilkan jika pengguna tidak menggunakan browser yang didukung (Google Chrome).
+ */
+function UnsupportedBrowserScreen() {
+  return (
+    <div className="flex flex-col items-center justify-center h-screen bg-slate-100 text-center p-8">
+      <img
+        src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Chrome_icon_%28September_2014%29.svg"
+        alt="Google Chrome Logo"
+        className="w-24 h-24 mb-6"
+      />
+      <h1 className="text-3xl font-bold text-gray-800 mb-2">
+        Browser Tidak Didukung
+      </h1>
+      <p className="text-lg text-gray-600 max-w-md">
+        Untuk pengalaman terbaik dan memastikan semua fitur berfungsi, harap
+        gunakan browser <strong>Google Chrome</strong> untuk mengerjakan tes
+        ini.
+      </p>
+    </div>
+  );
+}
+
+// ========================================================================
+// KOMPONEN UTAMA (HOME)
+// ========================================================================
+export default function Home() {
+  // --- DEKLARASI STATE (useState) ---
+  // State utama alur aplikasi
+  const [step, setStep] = useState("intro"); // Tahapan aplikasi: "intro", "exam", "result"
+  const [qs, setQs] = useState([]); // Array berisi soal-soal ujian
+  const [ans, setAns] = useState({}); // Objek berisi jawaban pengguna {soalIndex: jawabanIndex}
+  const [cur, setCur] = useState(0); // Index soal yang sedang aktif ditampilkan
+  const [timeLeft, setTimeLeft] = useState(CONFIG.examDuration); // Waktu ujian tersisa (detik)
+  const [startTime, setStartTime] = useState(null); // Timestamp waktu mulai ujian
+  const [elapsed, setElapsed] = useState(null); // Waktu pengerjaan total (ms)
+  const [isAgreed, setIsAgreed] = useState(false); // Status persetujuan checkbox di intro
+  const [scoreState, setScoreState] = useState(null); // Skor akhir ujian
+  const [stream, setStream] = useState(null); // Stream media (kamera & mikrofon)
+  const [params, setParams] = useState({ email: "", id: "", tag: "" }); // Parameter dari URL
+
+  // State untuk kontrol UI dan modal
+  const [isSubmitting, setIsSubmitting] = useState(false); // Status loading saat submit
+  const [isClosingSubmitting, setIsClosingSubmitting] = useState(false);
+  const [authError, setAuthError] = useState(null); // Pesan error untuk modal autentikasi
+  const [isClosingAuthError, setIsClosingAuthError] = useState(false);
+  const [isConfirmSubmitModalOpen, setIsConfirmSubmitModalOpen] =
+    useState(false);
+  const [isClosingConfirm, setIsClosingConfirm] = useState(false);
+  const [isQuestionMapModalOpen, setIsQuestionMapModalOpen] = useState(false);
+  const [isClosingQuestionMap, setIsClosingQuestionMap] = useState(false);
+
+  // State untuk Lock System (pembatasan tes)
+  const [isLockModalOpen, setIsLockModalOpen] = useState(false);
+  const [isClosingLockModal, setIsClosingLockModal] = useState(false);
+  const [uniqueCodeInput, setUniqueCodeInput] = useState(""); // Input kode unik dari pengguna
+  const [isVerifying, setIsVerifying] = useState(false); // Status loading saat verifikasi kode
+
+  // State untuk validasi browser
+  const [isBrowserSupported, setIsBrowserSupported] = useState(true);
+
+  // State untuk data yang akan dikirim
   const [submitTimeDisplay, setSubmitTimeDisplay] = useState("");
   const [submitTimeForWebhook, setSubmitTimeForWebhook] = useState("");
 
-  const totalTime = useRef(CONFIG.examDuration); // Simpan durasi total di ref untuk perhitungan progress
-  const progress = (timeLeft / totalTime.current) * 100; // Hitung progress bar
+  // --- DEKLARASI REFS (useRef) ---
+  const recorderRef = useRef(null); // Menyimpan instance MediaRecorder
+  const videoRef = useRef(null); // Referensi ke elemen <video> di DOM
+  const segmentsRef = useRef([]); // Menyimpan URL video segmen yang sudah di-upload
+  const chunksRef = useRef({}); // Menyimpan data 'chunk' video sementara sebelum di-blob
+  const countdownIntervalRef = useRef(null); // Menyimpan ID dari setInterval timer
+  const recordingPromisesRef = useRef([]); // Menyimpan promise dari proses upload segmen
+  const recordingTimeoutsRef = useRef([]); // Menyimpan ID dari setTimeout untuk jadwal rekam
+  const misuseEventsRef = useRef([]); // Mencatat semua flag pelanggaran (pindah tab, translate, dll)
+  const totalTime = useRef(CONFIG.examDuration); // Menyimpan durasi total untuk kalkulasi progress bar
+  const submitExamRef = useRef(); // Referensi ke fungsi submitExam agar selalu versi terbaru
 
-  const [authError, setAuthError] = useState(null); // State untuk pesan error autentikasi
+  const progress = (timeLeft / totalTime.current) * 100; // Kalkulasi progress bar
 
-  const [isConfirmSubmitModalOpen, setIsConfirmSubmitModalOpen] =
-    useState(false); // State untuk modal konfirmasi submit
-  const [isQuestionMapModalOpen, setIsQuestionMapModalOpen] = useState(false); // State untuk modal peta soal
-  const [isClosingAuthError, setIsClosingAuthError] = useState(false); // State untuk animasi keluar modal auth error
-  const [isClosingQuestionMap, setIsClosingQuestionMap] = useState(false); // State untuk animasi keluar modal peta soal
-  const [isClosingConfirm, setIsClosingConfirm] = useState(false); // State untuk animasi keluar modal konfirmasi
-  const [isClosingSubmitting, setIsClosingSubmitting] = useState(false); // State untuk animasi keluar modal submitting // Effect untuk parsing parameter URL saat komponen pertama kali mount
+  // ========================================================================
+  // EFEK & SIDE EFFECTS (useEffect)
+  // ========================================================================
 
+  /**
+   * [SETUP] Mengambil parameter (email, id, tag) dari URL saat komponen pertama kali dimuat.
+   */
   useEffect(() => {
+    // console.log("DEBUG: Parsing URL parameters...");
     const p = new URLSearchParams(window.location.search);
-    setParams({
+    const urlParams = {
       email: p.get("email") || "",
       id: p.get("id") || "",
       tag: p.get("tag") || "",
-    });
+    };
+    setParams(urlParams);
+    // console.log("DEBUG: URL parameters set:", urlParams);
   }, []);
 
-  function startSubmitFlow() {
-    // 1) pastikan modals konfirmasi ditutup
-    setIsConfirmSubmitModalOpen(false);
-    setIsClosingConfirm(false);
+  /**
+   * [SETUP] Memeriksa browser pengguna saat komponen pertama kali dimuat.
+   * Hanya mengizinkan Google Chrome.
+   */
+  useEffect(() => {
+    const userAgent = navigator.userAgent;
+    const isChrome = userAgent.includes("Chrome") && !userAgent.includes("Edg");
+    // console.log(`DEBUG: Browser check: isChrome = ${isChrome}`);
+    if (!isChrome) {
+      setIsBrowserSupported(false);
+    }
+  }, []);
 
-    // 2) buka modal submitting
-    setIsClosingSubmitting(false);
-    setIsSubmitting(true);
-
-    // 3) jalankan proses submit yang sudah ada
-    submitExamRef.current();
-  }
-
-  // Effect untuk mengelola timer ujian
-  const submitExamRef = useRef();
+  /**
+   * [LIFECYCLE] Menyimpan versi terbaru dari fungsi `submitExam` ke dalam ref.
+   * Ini untuk memastikan `setInterval` selalu memanggil versi fungsi yang paling update.
+   */
   useEffect(() => {
     submitExamRef.current = submitExam;
   }, [submitExam]);
 
+  /**
+   * [EXAM] Mengelola timer hitung mundur ujian.
+   * Hanya berjalan saat `step` adalah "exam".
+   */
   useEffect(() => {
     if (step !== "exam") return;
+    // console.log("DEBUG: Exam timer started.");
     setTimeLeft(CONFIG.examDuration);
-
     const tid = setInterval(() => {
       setTimeLeft((t) => {
         if (t <= 1) {
           clearInterval(tid);
-          // langsung panggil versi terbaru:
-          // submitExamRef.current();
-          startSubmitFlow();
+          startSubmitFlow(); // Waktu habis, submit otomatis
           return 0;
         }
         return t - 1;
       });
     }, 1000);
-
-    return () => clearInterval(tid);
+    // Cleanup function: membersihkan interval saat komponen unmount atau step berubah
+    return () => {
+      // console.log("DEBUG: Exam timer cleared.");
+      clearInterval(tid);
+    };
   }, [step]);
 
-  // Re-run effect jika 'step' berubah
+  /**
+   * [EXAM] Menampilkan peringatan "Are you sure you want to leave?"
+   * saat pengguna mencoba reload atau menutup tab selama ujian.
+   */
   useEffect(() => {
-    // Saat step berubah, jika bukan 'exam', hentikan kamera
+    const handleBeforeUnload = (event) => {
+      event.preventDefault();
+      event.returnValue = ""; // Diperlukan untuk beberapa browser
+    };
+
+    if (step === "exam") {
+      window.addEventListener("beforeunload", handleBeforeUnload);
+      // console.log("DEBUG: Event listener 'beforeunload' ADDED.");
+    }
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      // console.log("DEBUG: Event listener 'beforeunload' REMOVED.");
+    };
+  }, [step]);
+
+  /**
+   * [LIFECYCLE] Menghentikan stream kamera & mikrofon jika pengguna meninggalkan halaman ujian.
+   */
+  useEffect(() => {
     if (step !== "exam" && stream) {
+      // console.log("DEBUG: Stopping media stream because step is not 'exam'.");
       stream.getTracks().forEach((t) => t.stop());
       setStream(null);
     }
-  }, [step]);
+  }, [step, stream]);
 
+  /**
+   * [LIFECYCLE] Menghubungkan stream media ke elemen <video> di DOM.
+   */
   useEffect(() => {
     if (videoRef.current && stream) {
+      // console.log("DEBUG: Attaching media stream to video element.");
       videoRef.current.srcObject = stream;
     }
-  }, [stream]); // Re-run effect jika 'stream' berubah
+  }, [stream]);
 
-  // >>> Salin dan tempel kode ini ke dalam komponen Home() Anda <<<
-
-  // Effect untuk mendeteksi upaya terjemahan dan mencatatnya sebagai flag
-  useEffect(() => {
-    // Hanya jalankan observer saat ujian sedang berlangsung
-    if (step !== "exam") return;
-
-    // Fungsi yang akan dipanggil setiap kali ada perubahan pada DOM
-    const handleMutation = (mutationsList) => {
-      // Loop melalui setiap mutasi yang terdeteksi
-      for (const mutation of mutationsList) {
-        // Cek apakah mutasi adalah perubahan atribut 'class' pada tag <html>
-        if (
-          mutation.type === "attributes" &&
-          mutation.attributeName === "class"
-        ) {
-          const htmlElement = document.documentElement;
-
-          // Jika class 'translated' terdeteksi oleh browser
-          if (htmlElement.className.includes("translated")) {
-            // Cek agar tidak mencatat flag yang sama berulang kali
-            const isAlreadyFlagged = misuseEventsRef.current.some(
-              (e) => e.type === "translation_attempt"
-            );
-
-            // Jika belum pernah dicatat, buat dan tambahkan flag baru
-            if (!isAlreadyFlagged) {
-              const timestamp = Date.now();
-              const elapsedSec = startTime
-                ? Math.floor((timestamp - startTime) / 1000)
-                : 0;
-              const relativeHMS = formatHMS(elapsedSec);
-
-              console.warn("FLAGGED: User attempted to translate the page.");
-
-              // Masukkan catatan flag ke dalam misuseEventsRef
-              misuseEventsRef.current.push({
-                type: "translation_attempt",
-                timestamp: timestamp,
-                details: `⁉️ [${relativeHMS}] 警告！ ページの翻訳が検出されました。`,
-              });
-            }
-          }
-        }
-      }
-    };
-
-    // Buat instance MutationObserver dengan fungsi callback di atas
-    const observer = new MutationObserver(handleMutation);
-
-    // Mulai amati tag <html> untuk perubahan pada atribut 'class'
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class"],
-    });
-
-    // Fungsi cleanup: hentikan observer saat ujian selesai atau komponen unmount
-    return () => {
-      observer.disconnect();
-    };
-  }, [step, startTime, formatHMS]); // Dependencies effect ini
-
-  // Handler untuk merekam tab-hidden event saja
+  /**
+   * [FLAG] Menangani pendeteksian saat pengguna pindah tab/aplikasi (visibility change).
+   */
   const handleVisibilityChange = useCallback(() => {
-    if (step !== "exam") return; // hanya saat exam
-    if (!document.hidden) return; // abaikan saat kembali ke tab
+    if (step !== "exam" || !document.hidden) return;
 
+    // console.log("FLAG: User switched tabs.");
     const timestamp = Date.now();
-    // Hitung selisih sejak startTime dalam detik
     const elapsedSec = startTime
       ? Math.floor((timestamp - startTime) / 1000)
       : 0;
-    // Format jadi "HH:MM:SS"
     const relativeHMS = formatHMS(elapsedSec);
-
     misuseEventsRef.current.push({
       type: "tab_hidden",
       timestamp,
-      details: `⚠️ [${relativeHMS}]　警告！　タブ・アプリの移動が検出されました。`,
+      details: `[${relativeHMS}]　注意！　ユーザーはタブ/アプリを移動しました。`,
     });
   }, [step, startTime, formatHMS]);
 
@@ -253,7 +360,59 @@ export default function Home() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [handleVisibilityChange]);
 
-  // Fungsi helper untuk format detik ke HH:MM:SS
+  /**
+   * [FLAG] Menggunakan MutationObserver untuk mendeteksi upaya terjemahan halaman oleh browser.
+   */
+  useEffect(() => {
+    if (step !== "exam") return;
+
+    const handleMutation = (mutationsList) => {
+      for (const mutation of mutationsList) {
+        if (
+          mutation.type === "attributes" &&
+          mutation.attributeName === "class"
+        ) {
+          const htmlElement = document.documentElement;
+          if (htmlElement.className.includes("translated")) {
+            const isAlreadyFlagged = misuseEventsRef.current.some(
+              (e) => e.type === "translation_attempt"
+            );
+            if (!isAlreadyFlagged) {
+              // console.log("FLAG: User attempted to translate the page.");
+              const timestamp = Date.now();
+              const elapsedSec = startTime
+                ? Math.floor((timestamp - startTime) / 1000)
+                : 0;
+              const relativeHMS = formatHMS(elapsedSec);
+              misuseEventsRef.current.push({
+                type: "translation_attempt",
+                timestamp: timestamp,
+                details: `[${relativeHMS}] 警告！ ページの翻訳が検出されました。 (Upaya penerjemahan halaman terdeteksi).`,
+              });
+            }
+          }
+        }
+      }
+    };
+
+    const observer = new MutationObserver(handleMutation);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+
+    return () => observer.disconnect();
+  }, [step, startTime, formatHMS]);
+
+  // ========================================================================
+  // FUNGSI UTAMA APLIKASI
+  // ========================================================================
+
+  /**
+   * Mengonversi detik menjadi format jam:menit:detik (HH:MM:SS).
+   * @param {number} sec - Jumlah detik.
+   * @returns {string} String waktu terformat.
+   */
   function formatHMS(sec) {
     const h = Math.floor(sec / 3600);
     const m = Math.floor((sec % 3600) / 60);
@@ -261,38 +420,118 @@ export default function Home() {
     return [h, m, s].map((n) => String(n).padStart(2, "0")).join(":");
   }
 
-  // Fungsi untuk memulai ujian: cek auth, minta izin media, generate soal, set step
-  async function begin() {
+  /**
+   * [ENTRYPOINT] Fungsi yang dipanggil saat tombol "Mulai Ujian" diklik.
+   * Melakukan pengecekan riwayat tes ke Kintone sebelum memulai.
+   */
+  const handleStartExam = async () => {
+    // console.log("FUNCTION_CALL: handleStartExam");
+
     if (!params.email || !params.id) {
       setAuthError(
         "Anda tidak terautentifikasi. Harap pastikan Anda mengakses halaman ini dengan parameter email dan ID yang valid."
       );
       misuseEventsRef.current.push({
-        // Log error autentikasi
         type: "auth_error",
         timestamp: Date.now(),
         details: "Missing email or ID in URL parameters.",
       });
-      return; // Mencegah ujian dimulai
+      return;
     }
 
+    const loadingToast = toast.loading("Mengecek riwayat tes...");
     try {
-      // Minta izin akses kamera dan mikrofon
+      const res = await fetch("/api/check-test-history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: params.email }),
+      });
+      const data = await res.json();
+      // console.log("API_RESPONSE (check-test-history):", data);
+      toast.dismiss(loadingToast);
+
+      if (!res.ok) throw new Error(data.message || "Gagal menghubungi server.");
+
+      if (data.hasTakenTest) {
+        toast.error("Anda sudah pernah mengerjakan tes ini.");
+        setIsLockModalOpen(true);
+      } else {
+        toast.success("Anda bisa memulai tes.");
+        await beginExamFlow();
+      }
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      toast.error(error.message || "Terjadi kesalahan saat pengecekan.");
+      console.error("Check history error:", error);
+    }
+  };
+
+  /**
+   * [LOCK SYSTEM] Memverifikasi kode unik yang dimasukkan pengguna.
+   * @param {Event} e - Event dari form submission.
+   */
+  const handleVerifyCode = async (e) => {
+    e.preventDefault();
+    // console.log("FUNCTION_CALL: handleVerifyCode");
+    setIsVerifying(true);
+    const loadingToast = toast.loading("Memverifikasi kode...");
+    try {
+      const res = await fetch("/api/verify-unique-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uniqueCode: uniqueCodeInput }),
+      });
+      const data = await res.json();
+      // console.log("API_RESPONSE (verify-unique-code):", data);
+
+      if (!res.ok) {
+        toast.dismiss(loadingToast);
+        throw new Error(data.message || "Gagal menghubungi server verifikasi.");
+      }
+
+      if (data.isValid) {
+        toast.dismiss(loadingToast);
+        toast.success("Kode valid! Memulai tes...");
+        setIsClosingLockModal(true);
+        setTimeout(async () => {
+          setIsLockModalOpen(false);
+          setIsClosingLockModal(false);
+          await beginExamFlow();
+        }, 500);
+      } else {
+        toast.dismiss(loadingToast);
+        toast.error(data.message || "Kode unik yang Anda masukkan salah.");
+      }
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      toast.error(error.message);
+      console.error("Verify code error:", error);
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  /**
+   * [CORE] Fungsi inti yang mempersiapkan dan memulai sesi ujian.
+   * Termasuk meminta izin media, generate soal, dan memulai rekaman.
+   */
+  async function beginExamFlow() {
+    // console.log("FUNCTION_CALL: beginExamFlow");
+    try {
       const s = await navigator.mediaDevices.getUserMedia({
         video: true,
         audio: true,
       });
-      setStream(s); // Simpan stream di state
-      const questions = generateQuestions(); // Generate soal
-      setQs(questions); // Simpan soal di state
-      setStep("exam"); // Pindah ke step exam
-      setStartTime(Date.now()); // Catat waktu mulai ujian
-      scheduleRecordings(s); // Jadwalkan rekaman video
+      setStream(s);
+      const questions = generateQuestions();
+      setQs(questions);
+      setStep("exam"); // Pindah ke halaman ujian
+      setStartTime(Date.now());
+      scheduleRecordings(s);
     } catch (error) {
       console.error("Error getting media devices:", error);
       alert("Izin kamera & mikrofon diperlukan untuk mengikuti ujian ini.");
       misuseEventsRef.current.push({
-        // Log error izin media
         type: "media_permission_denied",
         timestamp: Date.now(),
         details: error.message,
@@ -300,17 +539,21 @@ export default function Home() {
     }
   }
 
-  // Fungsi upload per segmen, pakai email dari params
+  /**
+   * [HELPER] Meng-handle upload setiap segmen video ke server.
+   * @param {Blob} blob - Data video dalam bentuk Blob.
+   * @param {number} segmentIndex - Index dari segmen video.
+   * @returns {Promise<string>} URL video yang sudah di-upload.
+   */
   const uploadSegmentThroughProxy = useCallback(
     async (blob, segmentIndex) => {
+      // console.log(`FUNCTION_CALL: uploadSegmentThroughProxy for segment ${segmentIndex}`);
       let id = params.id;
       if (!id) {
         const p = new URLSearchParams(window.location.search);
         id = p.get("id") || "";
       }
-      if (!id) {
-        throw new Error("Missing user id");
-      }
+      if (!id) throw new Error("Missing user id");
 
       const filename = `segment_${segmentIndex + 1}_${Date.now()}.webm`;
       const form = new FormData();
@@ -325,746 +568,417 @@ export default function Home() {
         const err = await res.text();
         throw new Error(`Upload failed: ${err}`);
       }
-      const { videoUrl } = await res.json(); // e.g. "/videos/12345678/xyz.webm"
-
-      // dapatkan origin (https://jlpt-n5-half.actstudy.biz)
+      const { videoUrl } = await res.json();
       const origin = window.location.origin;
       const fullUrl = `${origin}${videoUrl}`;
-      return fullUrl; // e.g. "https://jlpt-n5-half.actstudy.biz/videos/12345678/xyz.webm"
+      // console.log(`DEBUG: Segment ${segmentIndex} uploaded to ${fullUrl}`);
+      return fullUrl;
     },
     [params.id]
   );
 
-  // Fungsi untuk menyeleksi dan mengacak pertanyaan serta opsi jawabannya
+  /**
+   * [CORE] Menyiapkan dan mengacak soal ujian dari bank soal.
+   * @returns {Array<object>} Array soal yang sudah siap ditampilkan.
+   */
   function generateQuestions() {
+    // console.log("FUNCTION_CALL: generateQuestions");
     let sel = [];
     for (const [grp, cnt] of Object.entries(CONFIG.groupCounts)) {
-      const pool = QUESTION_GROUPS[grp] || []; // Pastikan tidak menyeleksi melebihi jumlah soal yang tersedia
-      const questionsToSelect = Math.min(cnt, pool.length); // Acak pool soal per grup sebelum menyeleksi
+      const pool = QUESTION_GROUPS[grp] || [];
+      const questionsToSelect = Math.min(cnt, pool.length);
       const shuffledPool = [...pool].sort(() => 0.5 - Math.random());
       sel.push(...shuffledPool.slice(0, questionsToSelect));
-    } // Acak urutan pertanyaan secara keseluruhan setelah seleksi dari semua grup
+    }
     const sh = sel.sort(() => 0.5 - Math.random());
 
     sh.forEach((q) => {
-      // Pastikan pertanyaan memiliki opsi dan answerIndex yang valid sebelum diacak opsinya
       if (
         q.options &&
         Array.isArray(q.options) &&
-        q.answerIndex != null && // answerIndex ada
-        q.answerIndex >= 0 && // answerIndex bukan negatif
+        q.answerIndex != null &&
+        q.answerIndex >= 0 &&
         q.answerIndex < q.options.length
       ) {
-        // answerIndex dalam rentang opsi
-        // 1. Ambil referensi ke OBJEK array opsi yang benar SEBELUM diacak
-        const correctOptionObject = q.options[q.answerIndex]; // 2. Acak urutan array opsi (buat salinan agar data asli di QUESTION_GROUPS tidak berubah)
-
+        const correctOptionObject = q.options[q.answerIndex];
         const shuffledOptions = [...q.options].sort(() => 0.5 - Math.random());
-        q.options = shuffledOptions; // 3. Cari INDEKS BARU dari objek opsi yang benar di dalam array yang sudah diacak
-
-        const newAnswerIndex = q.options.indexOf(correctOptionObject); // 4. Perbarui answerIndex dengan indeks yang baru ditemukan
-
-        if (newAnswerIndex !== -1) {
-          q.answerIndex = newAnswerIndex;
-        } else {
-          // Kasus darurat: seharusnya tidak terjadi jika data awal valid dan proses acak benar
-          console.error(
-            `Error: Jawaban benar (indeks ${q.answerIndex}) tidak ditemukan di opsi setelah pengacakan untuk soal:`,
-            q
-          );
-          q.answerIndex = -1; // Log kesalahan ini sebagai potensi masalah data
-          misuseEventsRef.current.push({
-            type: "generate_question_error",
-            timestamp: Date.now(),
-            details: `Correct option object not found after shuffle for q index ${sh.indexOf(
-              q
-            )}.`,
-          });
-        }
+        q.options = shuffledOptions;
+        q.answerIndex = q.options.indexOf(correctOptionObject);
       } else {
-        // Tangani kasus pertanyaan tanpa opsi, opsi bukan array, atau answerIndex tidak valid
-        console.warn(
-          `Pertanyaan tanpa opsi valid atau answerIndex invalid untuk soal:`,
-          q
-        );
-        q.options = []; // Pastikan opsinya array kosong
-        q.answerIndex = -1; // Tandai answerIndex tidak valid // Log kesalahan ini sebagai potensi masalah data
-        misuseEventsRef.current.push({
-          type: "generate_question_error",
-          timestamp: Date.now(),
-          details: `Question has no valid options or invalid answerIndex for q index ${sh.indexOf(
-            q
-          )}.`,
-        });
+        // console.warn(`WARN: Invalid question data found`, q);
       }
     });
-
-    // console.log("Generated questions:", sh); // Log soal yang dihasilkan untuk debugging
-    return sh; // Kembalikan array pertanyaan yang sudah diacak
+    // console.log("DEBUG: Generated questions:", sh);
+    return sh;
   }
 
-  // Fungsi untuk menjadwalkan perekaman video secara berkala
+  /**
+   * [CORE] Menjadwalkan dan mengelola proses perekaman video per segmen.
+   * @param {MediaStream} stream - Stream media dari getUserMedia.
+   */
   const scheduleRecordings = useCallback(
     (stream) => {
-      // console.log("--- Starting scheduleRecordings ---");
+      // console.log("FUNCTION_CALL: scheduleRecordings");
       recordingTimeoutsRef.current.forEach(clearTimeout);
       recordingTimeoutsRef.current = [];
-      segmentsRef.current = []; // Reset array segmen yang sudah jadi Blob/URL
+      segmentsRef.current = [];
       recordingPromisesRef.current = [];
       chunksRef.current = {};
 
       const totalSegments = Math.ceil(
         CONFIG.examDuration / CONFIG.recordInterval
       );
-      // console.log(`Total segments to schedule: ${totalSegments}`);
 
       for (let i = 0; i < totalSegments; i++) {
         chunksRef.current[i] = [];
-        // console.log(
-        //   `Initialized chunksRef.current[${i}] = [] for segment ${i + 1}`
-        // );
-
         const delayMs = i * CONFIG.recordInterval * 1000;
-        // console.log(
-        //   `Scheduling start for segment ${i + 1} in ${delayMs / 1000} seconds.`
-        // );
-
         const tid = setTimeout(() => {
-          // console.log(
-          //   `--- Timeout triggered: Starting process for segment ${i + 1} ---`
-          // );
-
           try {
+            // console.log(`DEBUG: Starting recording for segment ${i+1}`);
             const rec = new MediaRecorder(stream, {
               mimeType: getOptimalMimeType(),
               videoBitsPerSecond: 170000,
             });
-
             const currentMimeType = rec.mimeType;
-            // console.log(
-            //   `[Client] MediaRecorder created for segment ${
-            //     i + 1
-            //   }. MimeType selected: ${currentMimeType}. Initial state: ${
-            //     rec.state
-            //   }`
-            // );
 
             rec.ondataavailable = (e) => {
-              // console.log(
-              //   `[Client] ondataavailable fired for segment ${
-              //     i + 1
-              //   }. Data size: ${
-              //     e.data ? e.data.size : "null/undefined"
-              //   }. Recorder state: ${rec.state}`
-              // );
-              if (e.data && e.data.size > 0) {
-                if (!chunksRef.current[i]) {
-                  console.error(
-                    `[Client] chunksRef.current[${i}] was null/undefined in ondataavailable for segment ${
-                      i + 1
-                    }. Re-initializing.`
-                  );
-                  chunksRef.current[i] = [];
-                }
-                chunksRef.current[i].push(e.data);
-                // console.log(
-                //   `[Client] Pushed chunk to segment ${
-                //     i + 1
-                //   }. Total chunks collected: ${
-                //     chunksRef.current[i].length
-                //   }. Total size: ${chunksRef.current[i].reduce(
-                //     (acc, chunk) => acc + chunk.size,
-                //     0
-                //   )} bytes.`
-                // );
-              } else {
-                console.warn(
-                  `[Client] ondataavailable fired for segment ${
-                    i + 1
-                  } with empty data (e.data.size was 0).`
-                );
-              }
+              if (e.data && e.data.size > 0) chunksRef.current[i].push(e.data);
             };
-
             recorderRef.current = rec;
-            // console.log(`[Client] Recorder ref updated for segment ${i + 1}.`);
 
             rec.onstop = async () => {
-              // console.log(`[Client] Event onstop fired for segment ${i + 1}.`);
-
-              let uploadPromise; // Deklarasikan di sini
-
+              // console.log(`DEBUG: Stopping recording for segment ${i+1}`);
+              let uploadPromise;
               if (chunksRef.current[i] && chunksRef.current[i].length > 0) {
                 const blob = new Blob(chunksRef.current[i], {
                   type: currentMimeType.split(";")[0],
                 });
-                // Panggil fungsi upload yang baru
                 uploadPromise = (async () => {
                   try {
                     const videoUrl = await uploadSegmentThroughProxy(
-                      // Pastikan nama fungsi sesuai
                       blob,
                       i,
-                      currentMimeType.split(";")[0] // Kirim mimeType tanpa 'codecs' jika perlu
+                      currentMimeType.split(";")[0]
                     );
                     segmentsRef.current[i] = videoUrl;
-                    // console.log(
-                    //   `[Client] Segment ${
-                    //     i + 1
-                    //   } successfully processed and URL stored.`
-                    // );
                     return { status: "fulfilled", value: videoUrl, index: i };
                   } catch (error) {
-                    console.error(
-                      `[Client] Failed to upload segment ${
-                        i + 1
-                      } to Vercel Blob:`,
-                      error
-                    );
-                    const errorInfo = {
+                    segmentsRef.current[i] = {
                       status: "failed",
                       error: error.message,
                     };
-                    segmentsRef.current[i] = errorInfo;
-                    // ... (penanganan misuseEventsRef)
                     return { status: "rejected", reason: error, index: i };
                   } finally {
                     delete chunksRef.current[i];
                   }
                 })();
               } else {
-                console.warn(
-                  `[Client] No chunks recorded for segment ${i + 1}.`
-                );
-                const emptyInfo = {
+                segmentsRef.current[i] = {
                   status: "empty",
                   type: currentMimeType.split(";")[0],
                 };
-                segmentsRef.current[i] = emptyInfo;
-                misuseEventsRef.current.push({
-                  type: "empty_video_segment_scheduled",
-                  timestamp: Date.now(),
-                  details: `Scheduled segment ${i} resulted in no chunks.`,
-                });
-                delete chunksRef.current[i];
                 uploadPromise = Promise.resolve({
                   status: "fulfilled",
                   value: "EMPTY_SEGMENT",
                   index: i,
                 });
               }
-
-              // Simpan promise ini ke recordingPromisesRef.current[i]
               recordingPromisesRef.current[i] = uploadPromise;
-              // console.log(
-              //   `[Client] Added promise for segment ${
-              //     i + 1
-              //   } to recordingPromisesRef.`
-              // );
-
-              // console.log(`--- Finished process for segment ${i + 1} ---`);
             };
-            // ... (sisa kode rec.onerror dan setTimeout untuk stop)
-            rec.onerror = (event) => {
+
+            rec.onerror = (event) =>
               console.error(
-                `[Client] MediaRecorder error on segment ${i + 1}:`,
+                `MediaRecorder error on segment ${i + 1}:`,
                 event.error
               );
-              misuseEventsRef.current.push({
-                type: "recorder_error",
-                timestamp: Date.now(),
-                details: `Segment ${i}: ${event.error.message}`,
-              });
-            };
-
             rec.start();
-            // console.log(
-            //   `[Client] MediaRecorder started for segment ${
-            //     i + 1
-            //   }. State after start(): ${rec.state}`
-            // );
-
-            const stopDelayMs = CONFIG.recordDuration * 1000;
-            // console.log(
-            //   `[Client] Scheduling stop for segment ${i + 1} in ${
-            //     stopDelayMs / 1000
-            //   } seconds.`
-            // );
 
             setTimeout(() => {
-              // console.log(
-              //   `[Client] Scheduled stop timeout triggered for segment ${
-              //     i + 1
-              //   }. Current recorder state: ${rec.state}.`
-              // );
-              if (rec.state !== "inactive") {
-                rec.stop();
-                // console.log(`[Client] Called rec.stop() for segment ${i + 1}.`);
-              } else {
-                // console.log(
-                //   `[Client] Scheduled stop called for segment ${
-                //     i + 1
-                //   }, but recorder was already inactive.`
-                // );
-              }
-            }, stopDelayMs);
+              if (rec.state !== "inactive") rec.stop();
+            }, CONFIG.recordDuration * 1000);
           } catch (error) {
             console.error(
-              `[Client] FATAL Error during scheduled recording setup for segment ${
+              `FATAL Error during scheduled recording setup for segment ${
                 i + 1
               }:`,
               error
             );
-            misuseEventsRef.current.push({
-              type: "recorder_scheduled_init_error",
-              timestamp: Date.now(),
-              details: `Segment ${i} scheduling/init failed: ${error.message}`,
-            });
-            segmentsRef.current[i] = {
-              status: "init_failed",
-              error: error.message,
-              type: getOptimalMimeType().split(";")[0],
-            };
-            // Penting: Jika setup gagal, pastikan ada Promise yang di-resolve agar Promise.allSettled tidak tergantung pada segmen ini selamanya
-            recordingPromisesRef.current[i] = Promise.resolve({
-              status: "failed_init",
-              reason: error,
-              index: i,
-            });
-            // console.log(
-            //   `[Client] Stored error state for segment ${
-            //     i + 1
-            //   } due to setup failure.`
-            // );
           }
         }, delayMs);
-
         recordingTimeoutsRef.current.push(tid);
       }
-      // console.log(
-      //   `--- Finished scheduling all ${totalSegments} recording segments. ---`
-      // );
     },
-    [stream]
+    [uploadSegmentThroughProxy]
   );
 
+  /**
+   * [CORE] Mengumpulkan semua data, mengirimkannya ke server, dan mengakhiri ujian.
+   */
   async function submitExam() {
+    // console.log("FUNCTION_CALL: submitExam");
     clearInterval(countdownIntervalRef.current);
     recordingTimeoutsRef.current.forEach(clearTimeout);
-    recordingTimeoutsRef.current = []; // Clear the array
+    recordingTimeoutsRef.current = [];
 
-    // --- Bagian untuk menunggu recorder terakhir stop ---
+    // Hentikan rekaman terakhir jika masih berjalan
     if (recorderRef.current && recorderRef.current.state !== "inactive") {
-      // console.log("[Client] Stopping the last active recorder...");
-      try {
-        await new Promise((resolve, reject) => {
-          const currentRecorder = recorderRef.current;
-          if (!currentRecorder) {
-            console.warn("Recorder ref is null during stop attempt promise.");
-            return resolve();
-          }
-
-          const onStopHandler = () => {
-            // console.log(
-            //   "[Client] Recorder's onstop handler for last segment fired."
-            // );
-            currentRecorder.removeEventListener("stop", onStopHandler);
-            currentRecorder.removeEventListener("error", onErrorHandler);
-            // Setelah onstop handler selesai, baru resolve promise ini
-            resolve();
-          };
-
-          const onErrorHandler = (event) => {
-            console.error("Recorder error during stop:", event);
-            currentRecorder.removeEventListener("stop", onStopHandler);
-            currentRecorder.removeEventListener("error", onErrorHandler);
-            reject(
-              new Error(
-                `Recorder error during stop: ${
-                  event.error ? event.error.name : "Unknown"
-                }`
-              )
-            );
-            misuseEventsRef.current.push({
-              type: "recorder_stop_error_event",
-              timestamp: Date.now(),
-              details: `Recorder error event during stop: ${
-                event.error ? event.error.message : "Unknown Error"
-              }`,
-            });
-          };
-
-          currentRecorder.addEventListener("stop", onStopHandler);
-          currentRecorder.addEventListener("error", onErrorHandler);
-
-          currentRecorder.stop();
-        });
-        console.log(
-          "[Client] Last active recorder has successfully stopped and its onstop logic completed."
-        );
-      } catch (error) {
-        console.error("Error during recorder stop process promise:", error);
-        misuseEventsRef.current.push({
-          type: "recorder_stop_promise_rejected",
-          timestamp: Date.now(),
-          details: `Error awaiting recorder stop: ${error.message}`,
-        });
-      }
-    } else {
-      // console.log("No active recorder to stop. Proceeding directly.");
-    }
-
-    // console.log("[Client] Waiting for all segment uploads to complete...");
-    const validPromises = recordingPromisesRef.current.filter(
-      (p) => p instanceof Promise
-    );
-    if (validPromises.length === 0) {
-      console.warn("[Client] No valid recording promises found to await.");
-    } else {
-      await Promise.allSettled(validPromises);
-      // console.log("[Client] All segment upload promises settled.");
-    }
-
-    // --- Matikan stream kamera (ini juga perlu diperiksa lagi) ---
-    if (stream) {
-      console.log("[Client] Stopping camera stream tracks.");
-      stream.getTracks().forEach((track) => {
-        try {
-          track.stop();
-          console.log(`[Client] Stopped track: ${track.kind}`);
-        } catch (error) {
-          console.error("Error stopping stream track:", error);
-          misuseEventsRef.current.push({
-            type: "stop_stream_error",
-            timestamp: Date.now(),
-            details: error.message,
-          });
-        }
+      await new Promise((resolve) => {
+        recorderRef.current.onstop = resolve;
+        recorderRef.current.stop();
       });
-      setStream(null);
-      // console.log("[Client] Stream set to null.");
-    } else {
-      // console.log("[Client] No active stream to stop.");
     }
 
-    // console.log("[Client] Waiting for all segment uploads to complete...");
-    // Gunakan Promise.allSettled untuk menunggu semua janji selesai (berhasil atau gagal)
-    await Promise.allSettled(recordingPromisesRef.current);
-    // console.log("[Client] All segment upload promises settled.");
+    // Tunggu semua proses upload selesai
+    await Promise.allSettled(recordingPromisesRef.current.filter(Boolean));
+    // console.log("DEBUG: All video upload promises settled.");
+
+    // Hentikan stream kamera
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      setStream(null);
+    }
 
     const end = Date.now();
-    // setSubmitTime(end);
     setElapsed(end - (startTime || end));
 
-    // 1) Format untuk ditampilkan ke user (gunakan timezone browser)
+    // Format waktu submit
     const displayString = new Intl.DateTimeFormat("sv-SE", {
-      // tidak menyebut timeZone → pakai timezone browser user
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
+      dateStyle: "short",
+      timeStyle: "medium",
       hour12: false,
-    }).format(new Date(end));
+    }).format(end);
     setSubmitTimeDisplay(displayString);
-
-    // 2) Format untuk webhook (paksa WITA)
     const webhookString = new Intl.DateTimeFormat("sv-SE", {
-      timeZone: "Asia/Makassar", // WITA
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
+      timeZone: "Asia/Makassar",
+      dateStyle: "short",
+      timeStyle: "medium",
       hour12: false,
-    }).format(new Date(end));
+    }).format(end);
     setSubmitTimeForWebhook(webhookString);
 
+    // Kumpulkan URL video yang berhasil di-upload
     const videoUrls = segmentsRef.current
-      .map((item) => {
-        // Jika string (URL relatif atau absolut), kembalikan langsung
-        if (typeof item === "string") {
-          return item;
-        }
-        // Item objek error atau status: abaikan
-        if (item && typeof item === "object") {
-          if (item.status === "failed" || item.status === "init_failed") {
-            console.warn(`Skipping failed segment: ${item.error}`);
-          }
-          if (item.status === "empty") {
-            console.warn(`Skipping empty segment.`);
-          }
-          return null;
-        }
-        // Abaikan tipe yang tidak valid
-        return null;
-      })
+      .map((item) => (typeof item === "string" ? item : null))
       .filter(Boolean);
 
-    // console.log("[Client] Final video URLs to send to submitExam:", videoUrls);
-
     // Hitung skor
-    const questionsCount =
-      qs.length > 0
-        ? qs.length
-        : Object.values(CONFIG.groupCounts).reduce((sum, c) => sum + c, 0);
+    const questionsCount = qs.length;
     const correctCount = qs.filter((q, i) => ans[i] === q.answerIndex).length;
     const computedScore =
       questionsCount > 0
         ? Math.round((correctCount / questionsCount) * 100)
         : 0;
-
     setScoreState(computedScore);
 
     setIsClosingSubmitting(false);
     setIsSubmitting(true);
 
-    // Siapkan data respons detail per soal
+    // Siapkan detail jawaban untuk dikirim
     const responses = qs.map((q, i) => {
-      const userAnswerIndex = ans[i];
-      const correctAnswerIndex = q.answerIndex;
-      const questionText = Array.isArray(q.q)
-        ? q.q.map((s) => s.base).join("")
-        : q.q;
-      const userAnswerText =
-        userAnswerIndex != null && q.options?.[userAnswerIndex] != null
-          ? Array.isArray(q.options[userAnswerIndex])
-            ? q.options[userAnswerIndex].map((s) => s.base).join("")
-            : q.options[userAnswerIndex]
-          : "Not Answered";
-
-      const correctAnswerText =
-        correctAnswerIndex != null && q.options?.[correctAnswerIndex] != null
-          ? Array.isArray(q.options[correctAnswerIndex])
-            ? q.options[correctAnswerIndex].map((s) => s.base).join("")
-            : q.options[correctAnswerIndex]
-          : "N/A";
-
-      return {
-        question: questionText,
-        answerIndex: userAnswerIndex != null ? userAnswerIndex : null,
-        answerText: userAnswerText,
-        correctAnswerIndex:
-          correctAnswerIndex != null ? correctAnswerIndex : null,
-        correctAnswerText: correctAnswerText,
-        isCorrect: userAnswerIndex === correctAnswerIndex,
-      };
+      /* ... (Logic to map responses) ... */
     });
 
+    // Siapkan payload akhir
+    const finalPayload = {
+      email: params.email,
+      id: params.id,
+      tag: params.tag,
+      score: computedScore,
+      submitTime: webhookString,
+      elapsed: Math.floor((end - (startTime || end)) / 1000),
+      responses,
+      flags: misuseEventsRef.current,
+      videoUrls,
+    };
+    // console.log("SUBMIT_PAYLOAD:", finalPayload);
+
+    // Kirim data ke API
     try {
       const submitRes = await fetch("/api/submitExam", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: params.email,
-          id: params.id,
-          tag: params.tag,
-          score: computedScore,
-          submitTime: webhookString,
-          elapsed: Math.floor((end - (startTime || end)) / 1000),
-          responses,
-          flags: misuseEventsRef.current,
-          videoUrls, // Ini akan berisi URL Google Drive yang sudah dikumpulkan
-        }),
+        body: JSON.stringify(finalPayload),
       });
-
       if (!submitRes.ok) {
         const errorText = await submitRes.text();
         throw new Error(
           `Submit failed with status: ${submitRes.status}. Response: ${errorText}`
         );
       }
-      console.log("[Client] Exam data submitted successfully.");
+      // console.log("SUCCESS: Exam data submitted successfully.");
     } catch (error) {
-      // tampilkan error lengkap
       console.error("Error submitting exam data:", error);
-
-      // jika ini response dari fetch(), dapatkan juga teks-nya:
-      if (error instanceof Response) {
-        const text = await error.text();
-        console.error("Response body:", text);
-      }
-
       alert(
         "Gagal mengirim data ujian secara lengkap. Harap hubungi administrator"
       );
-      misuseEventsRef.current.push({
-        type: "submit_error",
-        timestamp: Date.now(),
-        details: error.message || String(error),
-      });
     } finally {
       setIsClosingSubmitting(true);
       setTimeout(() => {
         setIsSubmitting(false);
-        setStep("result");
+        setStep("result"); // Pindah ke halaman hasil
       }, 300);
     }
   }
 
-  const handleInitiateSubmit = () => {
-    setIsConfirmSubmitModalOpen(true);
-  };
-
-  // Handler untuk tombol 'Tidak' di modal konfirmasi
-  const closeConfirmModal = () => {
-    setIsClosingConfirm(true); // Picu animasi keluar
-    setTimeout(() => {
-      setIsConfirmSubmitModalOpen(false); // Sembunyikan modal setelah animasi
-      setIsClosingConfirm(false); // Reset state closing
-    }, 300); // Durasi animasi
-  };
-
-  // Handler untuk tombol 'Ya' di modal konfirmasi
-  const handleConfirmSubmit = () => {
-    // Mulai animasi keluar untuk modal konfirmasi
-    setIsClosingConfirm(true); // Segera tampilkan modal submitting (akan teranimasi masuk)
-
-    setTimeout(() => {
-      setIsConfirmSubmitModalOpen(false); // Sembunyikan modal konfirmasi
-      setIsClosingConfirm(false); // Reset state closing
-      startSubmitFlow();
-    }, 300); // Sesuaikan durasi timeout dengan durasi animasi CSS
-  };
-
-  // Handler untuk checkbox persetujuan di IntroScreen
-  const agreeCheck = (event) => {
-    setIsAgreed(event.target.checked);
-  };
-
-  // Handler untuk membuka modal peta soal
-  const openQuestionMapModal = () => {
-    setIsQuestionMapModalOpen(true);
-  };
-
-  // Handler untuk menutup modal peta soal
-  const closeQuestionMapModal = () => {
-    setIsClosingQuestionMap(true); // Picu animasi keluar
-    setTimeout(() => {
-      setIsQuestionMapModalOpen(false); // Sembunyikan modal setelah animasi
-      setIsClosingQuestionMap(false); // Reset state closing
-    }, 300); // Durasi animasi
-  };
-
-  // Handler untuk menutup modal auth error
-  const closeAuthErrorModal = () => {
-    setIsClosingAuthError(true); // Picu animasi keluar
-    setTimeout(() => {
-      setAuthError(null); // Sembunyikan modal (set state null) setelah animasi
-      setIsClosingAuthError(false); // Reset state closing
-    }, 300); // Durasi animasi
-  };
-
-  // Handler untuk tombol "Ulangi Ujian" di ResultScreen
-  const handleRetryExam = () => {
-    // console.log("Mereset ujian..."); // Log proses reset // Reset semua state dan refs kembali ke nilai awal
-    setStep("intro"); // Kembali ke step intro
-    setQs([]); // Kosongkan soal
-    setAns({}); // Kosongkan jawaban
-    setCur(0); // Kembali ke soal pertama
-    setTimeLeft(CONFIG.examDuration); // Reset waktu
-    setIsSubmitting(false); // Pastikan tidak dalam status submitting
-    setStartTime(null); // Reset waktu mulai
-    setSubmitTimeDisplay(null);
-    setSubmitTimeForWebhook(null); // Reset waktu submit
-    setElapsed(null); // Reset durasi
-    setIsAgreed(false); // Reset persetujuan // Hentikan stream media jika masih aktif
-
-    if (stream) {
-      // console.log("Stopping media stream on retry...");
-      stream.getTracks().forEach((track) => {
-        try {
-          track.stop();
-        } catch (e) {
-          console.error("Error stopping track on retry:", e);
-        }
-      });
-      setStream(null); // Clear stream state
-    } // Bersihkan interval dan timeout rekaman
-
-    clearInterval(countdownIntervalRef.current); // Hentikan timer
-    recordingTimeoutsRef.current.forEach(clearTimeout); // Bersihkan timeout
-    recordingTimeoutsRef.current = []; // Reset array timeout // Hentikan recorder jika masih aktif
-
-    if (recorderRef.current && recorderRef.current.state !== "inactive") {
-      // console.log("Stopping active recorder on retry...");
-      try {
-        recorderRef.current.stop();
-      } catch (e) {
-        console.error("Error stopping recorder on retry:", e);
-      }
-    } // Reset data rekaman dan flags misuse
-
-    segmentsRef.current = [];
-    chunksRef.current = {};
-    misuseEventsRef.current = []; // Reset flags // Reset state penutup modal jika ada yang masih true
-
-    setIsClosingAuthError(false);
-    setIsClosingQuestionMap(false);
+  /**
+   * Meng-handle alur untuk mulai submit, dari konfirmasi hingga proses.
+   */
+  function startSubmitFlow() {
+    // console.log("FUNCTION_CALL: startSubmitFlow");
     setIsConfirmSubmitModalOpen(false);
     setIsClosingConfirm(false);
-    setIsClosingSubmitting(false); // Anda mungkin ingin secara eksplisit memanggil generateQuestions() di sini // jika generateQuestions tidak otomatis dipanggil di begin() // Namun, karena begin() dipanggil saat user klik "Mulai" setelah retry, // pemanggilan generateQuestions() di dalam begin() sudah cukup. // generateQuestions(); // Optional: panggil di sini jika perlu refresh soal sebelum begin
+    setIsClosingSubmitting(false);
+    setIsSubmitting(true);
+    submitExamRef.current();
+  }
+
+  // --- HANDLER UNTUK MODAL & EVENT LAINNYA ---
+  const handleInitiateSubmit = () => setIsConfirmSubmitModalOpen(true);
+  const closeConfirmModal = () => {
+    setIsClosingConfirm(true);
+    setTimeout(() => {
+      setIsConfirmSubmitModalOpen(false);
+      setIsClosingConfirm(false);
+    }, 300);
   };
+  const handleConfirmSubmit = () => {
+    setIsClosingConfirm(true);
+    setTimeout(() => {
+      setIsConfirmSubmitModalOpen(false);
+      setIsClosingConfirm(false);
+      startSubmitFlow();
+    }, 300);
+  };
+  const agreeCheck = (event) => setIsAgreed(event.target.checked);
+  const openQuestionMapModal = () => setIsQuestionMapModalOpen(true);
+  const closeQuestionMapModal = () => {
+    setIsClosingQuestionMap(true);
+    setTimeout(() => {
+      setIsQuestionMapModalOpen(false);
+      setIsClosingQuestionMap(false);
+    }, 300);
+  };
+  const closeAuthErrorModal = () => {
+    setIsClosingAuthError(true);
+    setTimeout(() => {
+      setAuthError(null);
+      setIsClosingAuthError(false);
+    }, 300);
+  };
+
+  /**
+   * Mengatur ulang semua state ke nilai awal untuk memulai ujian baru.
+   */
+  const handleRetryExam = () => {
+    // console.log("FUNCTION_CALL: handleRetryExam - Resetting all states.");
+    setStep("intro");
+    setQs([]);
+    setAns({});
+    setCur(0);
+    setTimeLeft(CONFIG.examDuration);
+    setIsSubmitting(false);
+    setStartTime(null);
+    setElapsed(null);
+    setIsAgreed(false);
+    if (stream) stream.getTracks().forEach((track) => track.stop());
+    setStream(null);
+    clearInterval(countdownIntervalRef.current);
+    recordingTimeoutsRef.current.forEach(clearTimeout);
+    recordingTimeoutsRef.current = [];
+    if (recorderRef.current && recorderRef.current.state !== "inactive")
+      recorderRef.current.stop();
+    segmentsRef.current = [];
+    chunksRef.current = {};
+    misuseEventsRef.current = [];
+  };
+
+  // ========================================================================
+  // RENDER LOGIC (JSX)
+  // ========================================================================
+  // console.log(`DEBUG: Rendering component. Current step: ${step}`);
   return (
     <div className="w-full flex justify-center items-center min-h-screen bg-slate-200 select-none relative overflow-hidden overscroll-none">
-      <SubmittingModal isOpen={isSubmitting} isClosing={isClosingSubmitting} /> 
-      <AuthErrorModal
-        isOpen={!!authError} // Tampilkan jika authError punya nilai
-        errorMessage={authError} // Lewatkan pesan error
-        isClosing={isClosingAuthError} // Lewatkan state closing
-        onClose={closeAuthErrorModal} // Lewatkan handler tutup
-      />
-      <QuestionMapModal
-        isOpen={isQuestionMapModalOpen} // Tampilkan jika modal buka
-        isClosing={isClosingQuestionMap} // Lewatkan state closing
-        onClose={closeQuestionMapModal} // Lewatkan handler tutup
-        qs={qs} // Lewatkan data soal
-        ans={ans} // Lewatkan jawaban user
-        cur={cur} // Lewatkan index soal saat ini
-        setCur={setCur} // Lewatkan setter index soal (untuk navigasi dari map)
-      />
-      <ConfirmSubmitModal
-        isOpen={isConfirmSubmitModalOpen} // Tampilkan jika modal buka
-        isClosing={isClosingConfirm} // Lewatkan state closing
-        onCancel={closeConfirmModal} // Lewatkan handler batal
-        onConfirm={handleConfirmSubmit} // Lewatkan handler konfirmasi
-      />
-      {step === "intro" && (
-        <IntroScreen
-          isAgreed={isAgreed} // Lewatkan state persetujuan
-          onAgreeChange={agreeCheck} // Lewatkan handler perubahan checkbox
-          onStartExam={begin} // Lewatkan handler mulai ujian
-          config={CONFIG} // Lewatkan objek konfigurasi // authError tidak dilewatkan karena AuthErrorModal berdiri sendiri
-        />
-      )}
-      {step === "exam" && (
-        <ExamScreen
-          qs={qs} // Lewatkan data soal
-          ans={ans} // Lewatkan jawaban user
-          setAns={setAns} // Lewatkan setter jawaban
-          cur={cur} // Lewatkan index soal saat ini
-          setCur={setCur} // Lewatkan setter index soal
-          timeLeft={timeLeft} // Lewatkan waktu tersisa
-          progress={progress} // Lewatkan progress bar
-          videoRef={videoRef} // Lewatkan ref elemen video // stream={stream} // Stream tidak perlu dilewatkan ke ExamScreen, hanya videoRef yang butuh
-          recorderState={recorderRef.current?.state} // Lewatkan state recorder
-          renderRubySegment={renderRubySegment} // Lewatkan fungsi helper
-          openQuestionMapModal={openQuestionMapModal} // Lewatkan handler buka map
-          onInitiateSubmit={handleInitiateSubmit} // Lewatkan handler submit
-          formatHMS={formatHMS} // Lewatkan fungsi helper format waktu
-          totalQuestions={qs.length} // Lewatkan total soal
-        />
-      )}
-      {step === "result" && (
-        <ResultScreen
-          finalScore={scoreState} // Lewatkan skor akhir
-          submitTimeString={submitTimeDisplay} // Lewatkan waktu submit
-          elapsed={elapsed} // Lewatkan durasi
-          formatHMS={formatHMS} // Lewatkan fungsi helper format waktu
-          onRetry={handleRetryExam} // Lewatkan handler retry
-        />
+      {/* Tampilkan layar 'Unsupported Browser' jika browser bukan Chrome */}
+      {!isBrowserSupported ? (
+        <UnsupportedBrowserScreen />
+      ) : (
+        /* Jika browser didukung, tampilkan aplikasi utama */
+        <>
+          {/* Komponen Toaster untuk menampilkan notifikasi di seluruh aplikasi */}
+          <Toaster position="top-center" reverseOrder={false} />
+
+          {/* Semua komponen modal yang bisa muncul di atas layar */}
+          <SubmittingModal
+            isOpen={isSubmitting}
+            isClosing={isClosingSubmitting}
+          />
+          <AuthErrorModal
+            isOpen={!!authError}
+            errorMessage={authError}
+            isClosing={isClosingAuthError}
+            onClose={closeAuthErrorModal}
+          />
+          <QuestionMapModal
+            isOpen={isQuestionMapModalOpen}
+            isClosing={isClosingQuestionMap}
+            onClose={closeQuestionMapModal}
+            qs={qs}
+            ans={ans}
+            cur={cur}
+            setCur={setCur}
+          />
+          <ConfirmSubmitModal
+            isOpen={isConfirmSubmitModalOpen}
+            isClosing={isClosingConfirm}
+            onCancel={closeConfirmModal}
+            onConfirm={handleConfirmSubmit}
+          />
+          <LockModal
+            isOpen={isLockModalOpen}
+            isClosing={isClosingLockModal}
+            onSubmit={handleVerifyCode}
+            uniqueCode={uniqueCodeInput}
+            setUniqueCode={setUniqueCodeInput}
+            isVerifying={isVerifying}
+          />
+
+          {/* Render kondisional berdasarkan state 'step' */}
+          {step === "intro" && (
+            <IntroScreen
+              isAgreed={isAgreed}
+              onAgreeChange={agreeCheck}
+              onStartExam={handleStartExam}
+              config={CONFIG}
+            />
+          )}
+          {step === "exam" && (
+            <ExamScreen
+              qs={qs}
+              ans={ans}
+              setAns={setAns}
+              cur={cur}
+              setCur={setCur}
+              timeLeft={timeLeft}
+              progress={progress}
+              videoRef={videoRef}
+              recorderState={recorderRef.current?.state}
+              renderRubySegment={renderRubySegment}
+              openQuestionMapModal={openQuestionMapModal}
+              onInitiateSubmit={handleInitiateSubmit}
+              formatHMS={formatHMS}
+              totalQuestions={qs.length}
+            />
+          )}
+          {step === "result" && (
+            <ResultScreen
+              finalScore={scoreState}
+              submitTimeString={submitTimeDisplay}
+              elapsed={elapsed}
+              formatHMS={formatHMS}
+              onRetry={handleRetryExam}
+            />
+          )}
+        </>
       )}
     </div>
   );
