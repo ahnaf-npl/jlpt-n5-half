@@ -413,12 +413,19 @@ export default function Home() {
    * @param {number} sec - Jumlah detik.
    * @returns {string} String waktu terformat.
    */
-  function formatHMS(sec) {
+  // function formatHMS(sec) {
+  //   const h = Math.floor(sec / 3600);
+  //   const m = Math.floor((sec % 3600) / 60);
+  //   const s = sec % 60;
+  //   return [h, m, s].map((n) => String(n).padStart(2, "0")).join(":");
+  // }
+  // Menjadi ini (letakkan di dalam komponen Home):
+  const formatHMS = useCallback((sec) => {
     const h = Math.floor(sec / 3600);
     const m = Math.floor((sec % 3600) / 60);
     const s = sec % 60;
     return [h, m, s].map((n) => String(n).padStart(2, "0")).join(":");
-  }
+  }, []); // Dependensi kosong karena fungsi ini tidak bergantung pada state/props
 
   /**
    * [ENTRYPOINT] Fungsi yang dipanggil saat tombol "Mulai Ujian" diklik.
@@ -714,7 +721,8 @@ export default function Home() {
   /**
    * [CORE] Mengumpulkan semua data, mengirimkannya ke server, dan mengakhiri ujian.
    */
-  async function submitExam() {
+  // async function submitExam() {
+  const submitExam = useCallback(async () => {
     // console.log("FUNCTION_CALL: submitExam");
     clearInterval(countdownIntervalRef.current);
     recordingTimeoutsRef.current.forEach(clearTimeout);
@@ -818,7 +826,7 @@ export default function Home() {
         setStep("result"); // Pindah ke halaman hasil
       }, 300);
     }
-  }
+  }, [params, startTime, qs, ans, stream]);
 
   /**
    * Meng-handle alur untuk mulai submit, dari konfirmasi hingga proses.

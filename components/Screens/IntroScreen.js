@@ -25,7 +25,7 @@ function IntroScreen({ isAgreed, onAgreeChange, onStartExam, config }) {
         <ul className="text-sm mb-6 text-justify">
           <li>
             🔹Gunakan browser
-            <strong className="text-blue-500"> "Google Chrome"</strong> saat
+            <strong className="text-blue-500"> **Google Chrome**</strong> saat
             mengerjakan tes ini.
           </li>
           <li>
