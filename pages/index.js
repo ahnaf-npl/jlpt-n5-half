@@ -263,14 +263,33 @@ export default function Home() {
    * [SETUP] Memeriksa browser pengguna saat komponen pertama kali dimuat.
    * Hanya mengizinkan Google Chrome.
    */
+  // useEffect(() => {
+  //   const userAgent = navigator.userAgent;
+  //   const isChrome = userAgent.includes("Chrome") && !userAgent.includes("Edg");
+  //   // console.log(`DEBUG: Browser check: isChrome = ${isChrome}`);
+  //   if (!isChrome) {
+  //     setIsBrowserSupported(false);
+  //   }
+  // }, []);
+  // useEffect untuk validasi browser BARU
   useEffect(() => {
     const userAgent = navigator.userAgent;
-    const isChrome = userAgent.includes("Chrome") && !userAgent.includes("Edg");
-    // console.log(`DEBUG: Browser check: isChrome = ${isChrome}`);
-    if (!isChrome) {
+    // console.log("DEBUG: User Agent String:", userAgent); // Aktifkan ini untuk melihat user agent Anda
+
+    // Cek untuk Chrome di Desktop/Android
+    const isDesktopChrome =
+      userAgent.includes("Chrome") && !userAgent.includes("Edg");
+
+    // Cek untuk Chrome di iOS (iPhone/iPad)
+    const isIOSChrome = userAgent.includes("CriOS");
+
+    // Jika salah satunya benar, maka browser didukung
+    const isBrowserSupported = isDesktopChrome || isIOSChrome;
+
+    if (!isBrowserSupported) {
       setIsBrowserSupported(false);
     }
-  }, []);
+  }, []); // Array dependensi kosong agar hanya berjalan sekali saat mount
 
   /**
    * [LIFECYCLE] Menyimpan versi terbaru dari fungsi `submitExam` ke dalam ref.
