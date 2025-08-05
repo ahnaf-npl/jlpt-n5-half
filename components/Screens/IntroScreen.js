@@ -25,7 +25,11 @@ function IntroScreen({ isAgreed, onAgreeChange, onStartExam, config }) {
         <ul className="text-sm mb-6 text-justify">
           <li>
             🔹Gunakan browser
-            <strong className="text-blue-500"> **Google Chrome**</strong> saat
+            <strong className="text-blue-500">
+              {" "}
+              **Google Chrome**
+            </strong> atau{" "}
+            <strong className="text-blue-500"> **Safari**</strong> saat
             mengerjakan tes ini.
           </li>
           <li>
@@ -58,18 +62,49 @@ function IntroScreen({ isAgreed, onAgreeChange, onStartExam, config }) {
         <p className="text-sm mb-8 text-justify">
           Silakan dikerjakan dengan baik dan jujur. Good Luck!
         </p>
-
-        <div className="flex items-center mb-4">
-          <label className="custom-checkbox-container">
+        <div className="bg-sky-50 border-l-4 border-sky-500 p-4 rounded-md mb-6">
+          <label className="flex items-start cursor-pointer">
+            {/* Checkbox asli yang disembunyikan */}
             <input
               type="checkbox"
               id="agreement"
               checked={isAgreed}
               onChange={onAgreeChange}
+              className="absolute opacity-0 h-0 w-0"
             />
-            <span className="checkmark"></span>
-            Saya mengerti instruksi dan petunjuk di atas.
+
+            {/* Checkmark Kustom */}
+            <span
+              className={`w-5 h-5 mt-0.5 mr-3 flex-shrink-0 flex items-center justify-center border-2 rounded transition-colors duration-200
+          ${
+            isAgreed ? "bg-sky-600 border-sky-600" : "bg-white border-slate-400"
+          }`}
+            >
+              {isAgreed && (
+                <svg
+                  className="w-3.5 h-3.5 text-white"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={3}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+              )}
+            </span>
+
+            {/* [PERBAIKAN KUNCI] Teks label dibungkus dalam span agar menjadi flex item yang rapi */}
+            <span className="text-slate-700 text-sm">
+              Saya mengerti instruksi dan petunjuk di atas.
+            </span>
           </label>
+          <p className="text-xs text-slate-500 mt-2">
+            ※ Kamu harus mencentang kotak ini untuk dapat memulai.
+          </p>
         </div>
 
         <button

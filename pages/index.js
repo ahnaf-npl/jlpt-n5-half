@@ -263,32 +263,47 @@ export default function Home() {
    * [SETUP] Memeriksa browser pengguna saat komponen pertama kali dimuat.
    * Hanya mengizinkan Google Chrome.
    */
+  // useEffect untuk validasi browser BARU
   // useEffect(() => {
   //   const userAgent = navigator.userAgent;
-  //   const isChrome = userAgent.includes("Chrome") && !userAgent.includes("Edg");
-  //   // console.log(`DEBUG: Browser check: isChrome = ${isChrome}`);
-  //   if (!isChrome) {
+  //   // console.log("DEBUG: User Agent String:", userAgent); // Aktifkan ini untuk melihat user agent Anda
+
+  //   // Cek untuk Chrome di Desktop/Android
+  //   const isDesktopChrome =
+  //     userAgent.includes("Chrome") && !userAgent.includes("Edg");
+
+  //   // Cek untuk Chrome di iOS (iPhone/iPad)
+  //   const isIOSChrome = userAgent.includes("CriOS");
+
+  //   // Jika salah satunya benar, maka browser didukung
+  //   const isBrowserSupported = isDesktopChrome || isIOSChrome;
+
+  //   if (!isBrowserSupported) {
   //     setIsBrowserSupported(false);
   //   }
-  // }, []);
-  // useEffect untuk validasi browser BARU
+  // }, []); // Array dependensi kosong agar hanya berjalan sekali saat mount
   useEffect(() => {
     const userAgent = navigator.userAgent;
-    // console.log("DEBUG: User Agent String:", userAgent); // Aktifkan ini untuk melihat user agent Anda
 
-    // Cek untuk Chrome di Desktop/Android
+    // 1. Cek untuk Chrome di Desktop/Android (tidak berubah)
     const isDesktopChrome =
       userAgent.includes("Chrome") && !userAgent.includes("Edg");
 
-    // Cek untuk Chrome di iOS (iPhone/iPad)
+    // 2. Cek untuk Chrome di iOS (tidak berubah)
     const isIOSChrome = userAgent.includes("CriOS");
 
-    // Jika salah satunya benar, maka browser didukung
-    const isBrowserSupported = isDesktopChrome || isIOSChrome;
+    // 3. BARU: Cek untuk Safari di Apple (iOS/iPadOS/macOS)
+    // Logikanya adalah: mengandung "Safari" TAPI tidak mengandung "Chrome" atau "CriOS"
+    const isSafari =
+      userAgent.includes("Safari") &&
+      !userAgent.includes("Chrome") &&
+      !userAgent.includes("CriOS");
 
-    if (!isBrowserSupported) {
-      setIsBrowserSupported(false);
-    }
+    // 4. Gabungkan semua kondisi. Browser didukung jika salah satunya benar.
+    const isBrowserSupported = isDesktopChrome || isIOSChrome || isSafari;
+
+    // Panggil state updater dengan hasil boolean
+    setIsBrowserSupported(isBrowserSupported);
   }, []); // Array dependensi kosong agar hanya berjalan sekali saat mount
 
   /**
