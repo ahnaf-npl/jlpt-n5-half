@@ -239,13 +239,13 @@ export default function CompatibilityCheckPage() {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-slate-100 p-4 transition-all duration-500">
       <div className="w-full max-w-2xl">
-        <div className="bg-white rounded-2xl shadow-xl p-6 md:p-10 transform transition-all duration-500 ease-in-out">
+        <div className="bg-white rounded-2xl shadow-xl p-4 md:p-10 transform transition-all duration-500 ease-in-out">
           <div className="text-center mb-8">
-            <h1 className="text-3xl md:text-4xl font-bold text-slate-800">
-              Pengecekan Perangkat
+            <h1 className="text-2xl md:text-4xl font-bold text-slate-800">
+              Device Check
             </h1>
             <p className="text-slate-500 mt-2">
-              Pastikan perangkat Anda siap sebelum hari ujian.
+              Pastikan perangkat Kamu siap sebelum hari ujian.
             </p>
           </div>
 
@@ -253,7 +253,7 @@ export default function CompatibilityCheckPage() {
             <label className="block text-sm font-medium text-slate-600 mb-1">
               Email Peserta
             </label>
-            <p className="text-lg font-semibold text-slate-800 break-all">
+            <p className="md:text-lg font-semibold text-slate-800 truncate">
               {email ||
                 "Tidak ada email di URL (tambahkan ?email=anda@email.com)"}
             </p>
@@ -268,7 +268,7 @@ export default function CompatibilityCheckPage() {
             <button
               onClick={handleStartCheck}
               disabled={isChecking}
-              className="w-full flex items-center justify-center gap-3 text-lg font-bold bg-blue-600 text-white py-4 rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300 transition-all duration-300 transform hover:-translate-y-1 disabled:bg-slate-400 disabled:transform-none"
+              className="w-full flex items-center justify-center gap-3 md:text-lg font-bold bg-blue-600 text-white py-4 rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300 transition-all duration-300 transform hover:-translate-y-1 disabled:bg-slate-400 disabled:transform-none"
             >
               {isChecking && <IconSpinner />}
               {isChecking
@@ -318,7 +318,7 @@ export default function CompatibilityCheckPage() {
 
           {results.submission && (
             <div
-              className={`animate-fade-in mt-8 p-5 rounded-lg text-center transition-all duration-500 ${
+              className={`animate-fade-in mt-8 py-5 px-3 md:p-5 rounded-lg text-center transition-all duration-500 ${
                 allChecksPassed ? "bg-green-100" : "bg-red-100"
               }`}
             >
@@ -337,7 +337,7 @@ export default function CompatibilityCheckPage() {
                 }`}
               >
                 {allChecksPassed
-                  ? "Semua sistem berfungsi normal. Anda siap untuk ujian."
+                  ? "Semua sistem berfungsi normal. Kamu siap untuk ujian."
                   : "Ada masalah yang terdeteksi. Mohon perbaiki sesuai pesan di atas atau siapkan perangkat lain."}
               </p>
             </div>
@@ -346,7 +346,7 @@ export default function CompatibilityCheckPage() {
 
         <footer className="text-center mt-8 text-slate-500 text-sm">
           <p>
-            &copy; {new Date().getFullYear()} LPK LINK. All rights reserved.
+            &copy; {new Date().getFullYear()} Act Study. All rights reserved.
           </p>
         </footer>
       </div>
