@@ -237,6 +237,7 @@ export default function Home() {
   const misuseEventsRef = useRef([]); // Mencatat semua flag pelanggaran (pindah tab, translate, dll)
   const totalTime = useRef(CONFIG.examDuration); // Menyimpan durasi total untuk kalkulasi progress bar
   const submitExamRef = useRef(); // Referensi ke fungsi submitExam agar selalu versi terbaru
+  const leaveTimeRef = useRef(null); // Untuk mencatat kapan user meninggalkan tab
 
   const progress = (timeLeft / totalTime.current) * 100; // Kalkulasi progress bar
 
@@ -382,29 +383,56 @@ export default function Home() {
   }, [stream]);
 
   /**
-   * [FLAG] Menangani pendeteksian saat pengguna pindah tab/aplikasi (visibility change).
+   * [FLAG] Menangani pendeteksian saat pengguna pindah tab/aplikasi dengan TOLERANSI WAKTU.
    */
   const handleVisibilityChange = useCallback(() => {
-    if (step !== "exam" || !document.hidden) return;
+    if (step !== "exam") return;
 
-    // console.log("FLAG: User switched tabs.");
-    const timestamp = Date.now();
-    const elapsedSec = startTime
-      ? Math.floor((timestamp - startTime) / 1000)
-      : 0;
-    const relativeHMS = formatHMS(elapsedSec);
-    misuseEventsRef.current.push({
-      type: "tab_hidden",
-      timestamp,
-      details: `[${relativeHMS}]　注意！　ユーザーはタブ/アプリを移動しました。`,
-    });
+    if (document.hidden) {
+      // KASUS 1: User meninggalkan halaman (Minimaze, Pindah Tab, Matikan Layar)
+      // Kita hanya mencatat waktu saat mereka pergi, jangan langsung di-flag.
+      leaveTimeRef.current = Date.now();
+    } else {
+      // KASUS 2: User kembali ke halaman
+      // Cek berapa lama mereka pergi
+      if (leaveTimeRef.current) {
+        const timeAway = Date.now() - leaveTimeRef.current;
+        leaveTimeRef.current = null; // Reset
+
+        // KONFIGURASI TOLERANSI: 5000 ms = 5 Detik.
+        // Jika notifikasi masuk/slide bar biasanya < 5 detik.
+        // Jika translate/browsing biasanya > 5 detik.
+        const TOLERANCE_MS = 5000;
+
+        if (timeAway > TOLERANCE_MS) {
+          // console.log("FLAG: User switched tabs for too long.");
+          const timestamp = Date.now();
+          const elapsedSec = startTime
+            ? Math.floor((timestamp - startTime) / 1000)
+            : 0;
+          const relativeHMS = formatHMS(elapsedSec);
+
+          // Konversi durasi hilang ke detik untuk detail log
+          const awaySeconds = Math.round(timeAway / 1000);
+
+          misuseEventsRef.current.push({
+            type: "tab_hidden",
+            timestamp,
+            details: `[${relativeHMS}] 注意！ ユーザーは ${awaySeconds}秒間タブ/アプリを離れました (User left for ${awaySeconds}s).`,
+          });
+
+          // Opsional: Berikan toast warning agar user sadar
+          toast.error(
+            `Peringatan: Anda meninggalkan ujian selama ${awaySeconds} detik!`,
+            {
+              duration: 4000,
+              icon: "⚠️",
+            }
+          );
+        }
+      }
+    }
   }, [step, startTime, formatHMS]);
-
-  useEffect(() => {
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () =>
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [handleVisibilityChange]);
 
   /**
    * [FLAG] Menggunakan MutationObserver untuk mendeteksi upaya terjemahan halaman oleh browser.
